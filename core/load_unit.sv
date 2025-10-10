@@ -553,15 +553,15 @@ module load_unit
   addr_offset0 :
   assert property (@(posedge clk_i) disable iff (~rst_ni)
         ldbuf_w |->  (ldbuf_wdata.operation inside {ariane_pkg::LW, ariane_pkg::LWU}) |-> ldbuf_wdata.address_offset < 5)
-  else $fatal(1, "invalid address offset used with {LW, LWU}");
+  else $warning("invalid address offset used with {LW, LWU} - will trigger LD_ADDR_MISALIGNED exception");
   addr_offset1 :
   assert property (@(posedge clk_i) disable iff (~rst_ni)
         ldbuf_w |->  (ldbuf_wdata.operation inside {ariane_pkg::LH, ariane_pkg::LHU}) |-> ldbuf_wdata.address_offset < 7)
-  else $fatal(1, "invalid address offset used with {LH, LHU}");
+  else $warning("invalid address offset used with {LH, LHU} - will trigger LD_ADDR_MISALIGNED exception");
   addr_offset2 :
   assert property (@(posedge clk_i) disable iff (~rst_ni)
         ldbuf_w |->  (ldbuf_wdata.operation inside {ariane_pkg::LB, ariane_pkg::LBU}) |-> ldbuf_wdata.address_offset < 8)
-  else $fatal(1, "invalid address offset used with {LB, LBU}");
+  else $warning("invalid address offset used with {LB, LBU} - will trigger LD_ADDR_MISALIGNED exception");
   //pragma translate_on
 
 endmodule

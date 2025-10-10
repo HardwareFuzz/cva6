@@ -1730,9 +1730,38 @@ module cva6
   logic [63:0] cycles;
 
   initial begin
-    string fn;
-    $sformat(fn, "trace_hart_%0.0f.dasm", hart_id_i);
-    f = $fopen(fn, "w");
+    string trace_fname;
+    string trace_dir;
+    string trace_override;
+    string hart_suffix;
+    longint unsigned hart_id_val;
+
+    hart_id_val = hart_id_i;
+    if ($value$plusargs("trace_core_file=%s", trace_override)) begin
+      bit override_has_format;
+      override_has_format = 0;
+      for (int idx = 0; idx < trace_override.len(); idx++) begin
+        if (trace_override[idx] == 8'd37) begin  // '%'
+          override_has_format = 1'b1;
+          break;
+        end
+      end
+      trace_fname = override_has_format ? $sformatf(trace_override, hart_id_val) : trace_override;
+    end else begin
+      if ($value$plusargs("trace_log_dir=%s", trace_dir)) begin
+        if (trace_dir.len() != 0 && trace_dir[trace_dir.len()-1] != 8'd47) begin
+          trace_dir = {trace_dir, "/"};
+        end
+      end else begin
+        trace_dir = "";
+      end
+      hart_suffix = $sformatf("%0d", int'(hart_id_val));
+      trace_fname = {trace_dir, "trace_hart_", hart_suffix, ".dasm"};
+    end
+    f = $fopen(trace_fname, "w");
+    if (f == 0) begin
+      $fatal(1, "*** [cva6] ERROR: Unable to open core trace file '%s'", trace_fname);
+    end
   end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin

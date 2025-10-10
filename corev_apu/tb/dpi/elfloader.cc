@@ -3,6 +3,7 @@
 
 #include <svdpi.h>
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include <sys/stat.h>
@@ -28,12 +29,11 @@ reg_t entry;
 int section_index = 0;
 
 void write (uint64_t address, uint64_t len, uint8_t* buf) {
-    uint64_t datum;
     std::vector<uint8_t> mem;
     for (int i = 0; i < len; i++) {
         mem.push_back(buf[i]);
     }
-    mems.insert(std::make_pair(address, mem));
+    mems[address] = mem;
 }
 
 // Communicate the section address and len
@@ -62,7 +62,31 @@ extern "C" void read_section (long long address, const svOpenArrayHandle buffer)
     }
 }
 
+extern "C" void read_section_void(long long address, void* buffer, uint64_t size) {
+    auto it = mems.find(address);
+    assert(it != mems.end());
+    const auto& data = it->second;
+    size_t copy_len = size ? std::min<size_t>(size, data.size()) : data.size();
+    if (copy_len == 0) {
+        return;
+    }
+    std::memcpy(buffer, data.data(), copy_len);
+}
+
+extern "C" char read_symbol(const char* symbol_name, long long* address) {
+    auto it = symbols.find(symbol_name);
+    if (it == symbols.end()) {
+        return 1;
+    }
+    *address = it->second;
+    return 0;
+}
+
 extern "C" void read_elf(const char* filename) {
+    sections.clear();
+    mems.clear();
+    symbols.clear();
+    section_index = 0;
     int fd = open(filename, O_RDONLY);
     struct stat s;
     assert(fd != -1);
@@ -81,7 +105,6 @@ extern "C" void read_elf(const char* filename) {
 
 
     std::vector<uint8_t> zeros;
-    std::map<std::string, uint64_t> symbols;
 
     #define LOAD_ELF(ehdr_t, phdr_t, shdr_t, sym_t) do { \
     ehdr_t* eh = (ehdr_t*)buf; \

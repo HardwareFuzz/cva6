@@ -40,9 +40,37 @@ module rvfi_tracer #(
   string binary;
   int f;
   int unsigned SIM_FINISH;
+  string trace_dir;
+  string trace_override;
+  string trace_fname;
+  string hart_suffix;
   initial begin
     TOHOST_ADDR = '0;
-    f = $fopen($sformatf("trace_rvfi_hart_%h.dasm", HART_ID), "w");
+    if ($value$plusargs("trace_rvfi_file=%s", trace_override)) begin
+      bit override_has_format;
+      override_has_format = 0;
+      for (int idx = 0; idx < trace_override.len(); idx++) begin
+        if (trace_override[idx] == 8'd37) begin  // '%'
+          override_has_format = 1'b1;
+          break;
+        end
+      end
+      trace_fname = override_has_format ? $sformatf(trace_override, HART_ID) : trace_override;
+    end else begin
+      if ($value$plusargs("trace_log_dir=%s", trace_dir)) begin
+        if (trace_dir.len() != 0 && trace_dir[trace_dir.len()-1] != 8'd47) begin
+          trace_dir = {trace_dir, "/"};
+        end
+      end else begin
+        trace_dir = "";
+      end
+      hart_suffix = $sformatf("%h", int'(HART_ID));
+      trace_fname = {trace_dir, "trace_rvfi_hart_", hart_suffix, ".dasm"};
+    end
+    f = $fopen(trace_fname, "w");
+    if (f == 0) begin
+      $fatal(1, "*** [rvfi_tracer] ERROR: Unable to open RVFI trace file '%s'", trace_fname);
+    end
     if (!$value$plusargs("time_out=%d", SIM_FINISH)) SIM_FINISH = 2000000;
     if (!$value$plusargs("tohost_addr=%h", TOHOST_ADDR)) TOHOST_ADDR = '0;
     if (TOHOST_ADDR == '0) begin
@@ -68,6 +96,28 @@ module rvfi_tracer #(
   string cause;
   logic[31:0] end_of_test_q;
   logic[31:0] end_of_test_d;
+
+  localparam int unsigned MEM_BYTES = CVA6Cfg.XLEN / 8;
+  localparam int unsigned MEM_OFFSET_BITS = (MEM_BYTES > 1) ? $clog2(MEM_BYTES) : 1;
+
+  function automatic logic [CVA6Cfg.XLEN-1:0] align_mem_wdata(
+    input logic [CVA6Cfg.XLEN-1:0] raw_wdata,
+    input logic [CVA6Cfg.VLEN-1:0] mem_addr
+  );
+    logic [CVA6Cfg.XLEN-1:0] rotated;
+    int byte_offset;
+
+    rotated = '0;
+    byte_offset = (MEM_BYTES > 1) ? int'(mem_addr[MEM_OFFSET_BITS-1:0]) : 0;
+    for (int byte_idx = 0; byte_idx < MEM_BYTES; byte_idx++) begin
+      int src_idx = byte_idx - byte_offset;
+      if (src_idx < 0) begin
+        src_idx += MEM_BYTES;
+      end
+      rotated[byte_idx*8 +: 8] = raw_wdata[src_idx*8 +: 8];
+    end
+    return rotated;
+  endfunction
 
   assign end_of_test_o = end_of_test_d;
 
@@ -110,11 +160,29 @@ module rvfi_tracer #(
         end else if (rvfi_i[i].rd_addr != 0) begin
           $fwrite(f, " x%d 0x%h", rvfi_i[i].rd_addr, rvfi_i[i].rd_wdata);
           if (rvfi_i[i].mem_rmask != 0) begin
-            $fwrite(f, " mem 0x%h", rvfi_i[i].mem_addr);
+            $fwrite(f, " mem 0x%h 0x%h", rvfi_i[i].mem_addr, rvfi_i[i].mem_rmask);
           end
         end else begin
           if (rvfi_i[i].mem_wmask != 0) begin
-            $fwrite(f, " mem 0x%h 0x%h", rvfi_i[i].mem_addr, rvfi_i[i].mem_wdata);
+            logic [CVA6Cfg.XLEN-1:0] aligned_mem_wdata;
+            string byte_info;
+            aligned_mem_wdata = align_mem_wdata(rvfi_i[i].mem_wdata, rvfi_i[i].mem_addr);
+            $fwrite(f, " mem 0x%h 0x%h 0x%h", rvfi_i[i].mem_addr, rvfi_i[i].mem_wdata, rvfi_i[i].mem_wmask);
+            byte_info = "";
+            for (int byte_idx = 0; byte_idx < MEM_BYTES; byte_idx++) begin
+              if (rvfi_i[i].mem_wmask[byte_idx]) begin
+                logic [CVA6Cfg.VLEN-1:0] byte_addr;
+                logic [CVA6Cfg.VLEN-1:0] base_addr;
+                base_addr = (MEM_BYTES > 1) ?
+                    {rvfi_i[i].mem_addr[CVA6Cfg.VLEN-1:MEM_OFFSET_BITS], {MEM_OFFSET_BITS{1'b0}}} :
+                    rvfi_i[i].mem_addr;
+                byte_addr = base_addr + byte_idx;
+                byte_info = {byte_info, $sformatf(" [%0d]0x%02h@0x%h", byte_idx, aligned_mem_wdata[byte_idx*8 +: 8], byte_addr)};
+              end
+            end
+            if (byte_info.len() != 0) begin
+              $fwrite(f, "%s", byte_info);
+            end
             if (TOHOST_ADDR != '0 &&
                 rvfi_i[i].mem_paddr == TOHOST_ADDR &&
                 rvfi_i[i].mem_wdata[0] == 1'b1) begin

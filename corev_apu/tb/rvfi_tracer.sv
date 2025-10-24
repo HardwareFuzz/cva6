@@ -205,33 +205,33 @@ module rvfi_tracer #(
           if (rvfi_i[i].mem_rmask != 0) begin
             $fwrite(f, " mem 0x%h 0x%h", rvfi_i[i].mem_addr, rvfi_i[i].mem_rmask);
           end
-        end else begin
-          if (rvfi_i[i].mem_wmask != 0) begin
-            logic [CVA6Cfg.XLEN-1:0] aligned_mem_wdata;
-            string byte_info;
-            aligned_mem_wdata = align_mem_wdata(rvfi_i[i].mem_wdata, rvfi_i[i].mem_addr);
-            $fwrite(f, " mem 0x%h 0x%h 0x%h", rvfi_i[i].mem_addr, rvfi_i[i].mem_wdata, rvfi_i[i].mem_wmask);
-            byte_info = "";
-            for (int byte_idx = 0; byte_idx < MEM_BYTES; byte_idx++) begin
-              if (rvfi_i[i].mem_wmask[byte_idx]) begin
-                logic [CVA6Cfg.VLEN-1:0] byte_addr;
-                logic [CVA6Cfg.VLEN-1:0] base_addr;
-                base_addr = (MEM_BYTES > 1) ?
-                    {rvfi_i[i].mem_addr[CVA6Cfg.VLEN-1:MEM_OFFSET_BITS], {MEM_OFFSET_BITS{1'b0}}} :
-                    rvfi_i[i].mem_addr;
-                byte_addr = base_addr + byte_idx;
-                byte_info = {byte_info, $sformatf(" [%0d]0x%02h@0x%h", byte_idx, aligned_mem_wdata[byte_idx*8 +: 8], byte_addr)};
-              end
+        end
+        // Handle memory writes (including for AMO instructions which have both rd and mem_wmask)
+        if (rvfi_i[i].mem_wmask != 0) begin
+          logic [CVA6Cfg.XLEN-1:0] aligned_mem_wdata;
+          string byte_info;
+          aligned_mem_wdata = align_mem_wdata(rvfi_i[i].mem_wdata, rvfi_i[i].mem_addr);
+          $fwrite(f, " mem 0x%h 0x%h 0x%h", rvfi_i[i].mem_addr, rvfi_i[i].mem_wdata, rvfi_i[i].mem_wmask);
+          byte_info = "";
+          for (int byte_idx = 0; byte_idx < MEM_BYTES; byte_idx++) begin
+            if (rvfi_i[i].mem_wmask[byte_idx]) begin
+              logic [CVA6Cfg.VLEN-1:0] byte_addr;
+              logic [CVA6Cfg.VLEN-1:0] base_addr;
+              base_addr = (MEM_BYTES > 1) ?
+                  {rvfi_i[i].mem_addr[CVA6Cfg.VLEN-1:MEM_OFFSET_BITS], {MEM_OFFSET_BITS{1'b0}}} :
+                  rvfi_i[i].mem_addr;
+              byte_addr = base_addr + byte_idx;
+              byte_info = {byte_info, $sformatf(" [%0d]0x%02h@0x%h", byte_idx, aligned_mem_wdata[byte_idx*8 +: 8], byte_addr)};
             end
-            if (byte_info.len() != 0) begin
-              $fwrite(f, "%s", byte_info);
-            end
-            if (TOHOST_ADDR != '0 &&
-                rvfi_i[i].mem_paddr == TOHOST_ADDR &&
-                rvfi_i[i].mem_wdata[0] == 1'b1) begin
-              end_of_test_q <= rvfi_i[i].mem_wdata[31:0];
-              $display("*** [rvfi_tracer] INFO: Simulation terminated after %d cycles!\n", cycles);
-            end
+          end
+          if (byte_info.len() != 0) begin
+            $fwrite(f, "%s", byte_info);
+          end
+          if (TOHOST_ADDR != '0 &&
+              rvfi_i[i].mem_paddr == TOHOST_ADDR &&
+              rvfi_i[i].mem_wdata[0] == 1'b1) begin
+            end_of_test_q <= rvfi_i[i].mem_wdata[31:0];
+            $display("*** [rvfi_tracer] INFO: Simulation terminated after %d cycles!\n", cycles);
           end
         end
         $fwrite(f, "\n");

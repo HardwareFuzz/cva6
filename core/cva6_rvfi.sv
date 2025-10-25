@@ -49,6 +49,54 @@ module cva6_rvfi
 
   localparam logic [CVA6Cfg.XLEN-1:0] hart_id_i = '0;
 
+  // Function to compute AMO write value for RVFI logging
+  // This replicates the AMO ALU logic to determine what value was written to memory
+  // Note: This is only used for trace generation and does not affect core functionality
+  function automatic logic [CVA6Cfg.XLEN-1:0] compute_amo_wdata(
+      input fu_op amo_op,
+      input logic [CVA6Cfg.XLEN-1:0] mem_old_val,
+      input logic [CVA6Cfg.XLEN-1:0] reg_val
+  );
+    logic signed [CVA6Cfg.XLEN:0] adder_sum;
+    logic signed [CVA6Cfg.XLEN:0] adder_a, adder_b;
+    
+    adder_a = $signed(mem_old_val);
+    adder_b = $signed(reg_val);
+    adder_sum = adder_a + adder_b;
+    
+    case (amo_op)
+      AMO_SCW, AMO_SCD:     return reg_val;
+      AMO_SWAPW, AMO_SWAPD: return reg_val;
+      AMO_ADDW, AMO_ADDD:   return adder_sum[CVA6Cfg.XLEN-1:0];
+      AMO_ANDW, AMO_ANDD:   return mem_old_val & reg_val;
+      AMO_ORW, AMO_ORD:     return mem_old_val | reg_val;
+      AMO_XORW, AMO_XORD:   return mem_old_val ^ reg_val;
+      AMO_MAXW, AMO_MAXD: begin
+        adder_b = -$signed(reg_val);
+        adder_sum = adder_a + adder_b;
+        return adder_sum[CVA6Cfg.XLEN] ? reg_val : mem_old_val;
+      end
+      AMO_MINW, AMO_MIND: begin
+        adder_b = -$signed(reg_val);
+        adder_sum = adder_a + adder_b;
+        return adder_sum[CVA6Cfg.XLEN] ? mem_old_val : reg_val;
+      end
+      AMO_MAXWU, AMO_MAXDU: begin
+        adder_a = $unsigned(mem_old_val);
+        adder_b = -$unsigned(reg_val);
+        adder_sum = adder_a + adder_b;
+        return adder_sum[CVA6Cfg.XLEN] ? reg_val : mem_old_val;
+      end
+      AMO_MINWU, AMO_MINDU: begin
+        adder_a = $unsigned(mem_old_val);
+        adder_b = -$unsigned(reg_val);
+        adder_sum = adder_a + adder_b;
+        return adder_sum[CVA6Cfg.XLEN] ? mem_old_val : reg_val;
+      end
+      default: return '0;
+    endcase
+  endfunction
+
   localparam logic [63:0] SMODE_STATUS_READ_MASK = ariane_pkg::smode_status_read_mask(CVA6Cfg);
 
   logic flush;
@@ -346,7 +394,19 @@ module cva6_rvfi
       // So far, only write paddr is reported. TODO: read paddr
       rvfi_instr_o[i].mem_paddr <= mem_paddr;
       rvfi_instr_o[i].mem_wmask <= mem_q[commit_pointer[i]].lsu_wmask;
-      rvfi_instr_o[i].mem_wdata <= mem_q[commit_pointer[i]].lsu_wdata;
+      
+      // For AMO operations, compute the actual write value
+      // Note: AMO operations write a computed value to memory, not the original register value
+      if (is_amo(commit_instr_op[i])) begin
+        rvfi_instr_o[i].mem_wdata <= compute_amo_wdata(
+            commit_instr_op[i],                    // AMO operation type
+            wdata[i],                              // Old memory value (the value returned to rd)
+            mem_q[commit_pointer[i]].rs2_rdata     // Register operand (rs2)
+        );
+      end else begin
+        rvfi_instr_o[i].mem_wdata <= mem_q[commit_pointer[i]].lsu_wdata;
+      end
+      
       rvfi_instr_o[i].mem_rmask <= mem_q[commit_pointer[i]].lsu_rmask;
       rvfi_instr_o[i].mem_rdata <= commit_instr_result[i];
       rvfi_instr_o[i].rs1_rdata <= mem_q[commit_pointer[i]].rs1_rdata;

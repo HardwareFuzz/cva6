@@ -50,51 +50,112 @@ module cva6_rvfi
   localparam logic [CVA6Cfg.XLEN-1:0] hart_id_i = '0;
 
   // Function to compute AMO write value for RVFI logging
-  // This replicates the AMO ALU logic to determine what value was written to memory
-  // Note: This is only used for trace generation and does not affect core functionality
+  // This mirrors the AMO ALU behaviour so the tracer sees the value actually written
+  // back to memory. This is post-alignment data (lower bytes contain the payload) so
+  // the tracer can rotate it using the write mask and address offset.
   function automatic logic [CVA6Cfg.XLEN-1:0] compute_amo_wdata(
       input fu_op amo_op,
       input logic [CVA6Cfg.XLEN-1:0] mem_old_val,
       input logic [CVA6Cfg.XLEN-1:0] reg_val
   );
-    logic signed [CVA6Cfg.XLEN:0] adder_sum;
-    logic signed [CVA6Cfg.XLEN:0] adder_a, adder_b;
-    
-    adder_a = $signed(mem_old_val);
-    adder_b = $signed(reg_val);
-    adder_sum = adder_a + adder_b;
-    
-    case (amo_op)
-      AMO_SCW, AMO_SCD:     return reg_val;
-      AMO_SWAPW, AMO_SWAPD: return reg_val;
-      AMO_ADDW, AMO_ADDD:   return adder_sum[CVA6Cfg.XLEN-1:0];
-      AMO_ANDW, AMO_ANDD:   return mem_old_val & reg_val;
-      AMO_ORW, AMO_ORD:     return mem_old_val | reg_val;
-      AMO_XORW, AMO_XORD:   return mem_old_val ^ reg_val;
-      AMO_MAXW, AMO_MAXD: begin
-        adder_b = -$signed(reg_val);
-        adder_sum = adder_a + adder_b;
-        return adder_sum[CVA6Cfg.XLEN] ? reg_val : mem_old_val;
-      end
-      AMO_MINW, AMO_MIND: begin
-        adder_b = -$signed(reg_val);
-        adder_sum = adder_a + adder_b;
-        return adder_sum[CVA6Cfg.XLEN] ? mem_old_val : reg_val;
-      end
-      AMO_MAXWU, AMO_MAXDU: begin
-        adder_a = $unsigned(mem_old_val);
-        adder_b = -$unsigned(reg_val);
-        adder_sum = adder_a + adder_b;
-        return adder_sum[CVA6Cfg.XLEN] ? reg_val : mem_old_val;
-      end
-      AMO_MINWU, AMO_MINDU: begin
-        adder_a = $unsigned(mem_old_val);
-        adder_b = -$unsigned(reg_val);
-        adder_sum = adder_a + adder_b;
-        return adder_sum[CVA6Cfg.XLEN] ? mem_old_val : reg_val;
-      end
-      default: return '0;
+    ariane_pkg::amo_t amo_kind;
+    logic is_word_op;
+    logic [63:0] operand_a_sext, operand_b_sext;
+    logic [63:0] operand_a_zext, operand_b_zext;
+    logic [63:0] result64;
+    logic [64:0] adder_operand_a, adder_operand_b, adder_sum;
+
+    // Decode functional unit opcode into AMO class and width information
+    amo_kind   = AMO_NONE;
+    is_word_op = 1'b0;
+    unique case (amo_op)
+      AMO_LRW:     begin amo_kind = AMO_LR;   is_word_op = 1'b1; end
+      AMO_LRD:     begin amo_kind = AMO_LR;   is_word_op = 1'b0; end
+      AMO_SCW:     begin amo_kind = AMO_SC;   is_word_op = 1'b1; end
+      AMO_SCD:     begin amo_kind = AMO_SC;   is_word_op = 1'b0; end
+      AMO_SWAPW:   begin amo_kind = AMO_SWAP; is_word_op = 1'b1; end
+      AMO_SWAPD:   begin amo_kind = AMO_SWAP; is_word_op = 1'b0; end
+      AMO_ADDW:    begin amo_kind = AMO_ADD;  is_word_op = 1'b1; end
+      AMO_ADDD:    begin amo_kind = AMO_ADD;  is_word_op = 1'b0; end
+      AMO_ANDW:    begin amo_kind = AMO_AND;  is_word_op = 1'b1; end
+      AMO_ANDD:    begin amo_kind = AMO_AND;  is_word_op = 1'b0; end
+      AMO_ORW:     begin amo_kind = AMO_OR;   is_word_op = 1'b1; end
+      AMO_ORD:     begin amo_kind = AMO_OR;   is_word_op = 1'b0; end
+      AMO_XORW:    begin amo_kind = AMO_XOR;  is_word_op = 1'b1; end
+      AMO_XORD:    begin amo_kind = AMO_XOR;  is_word_op = 1'b0; end
+      AMO_MAXW:    begin amo_kind = AMO_MAX;  is_word_op = 1'b1; end
+      AMO_MAXD:    begin amo_kind = AMO_MAX;  is_word_op = 1'b0; end
+      AMO_MAXWU:   begin amo_kind = AMO_MAXU; is_word_op = 1'b1; end
+      AMO_MAXDU:   begin amo_kind = AMO_MAXU; is_word_op = 1'b0; end
+      AMO_MINW:    begin amo_kind = AMO_MIN;  is_word_op = 1'b1; end
+      AMO_MIND:    begin amo_kind = AMO_MIN;  is_word_op = 1'b0; end
+      AMO_MINWU:   begin amo_kind = AMO_MINU; is_word_op = 1'b1; end
+      AMO_MINDU:   begin amo_kind = AMO_MINU; is_word_op = 1'b0; end
+      default:     begin amo_kind = AMO_NONE; is_word_op = 1'b0; end
     endcase
+
+    // Create signed and unsigned 64-bit views of the operands (word ops use 32-bit payloads)
+    if (is_word_op) begin
+      operand_a_sext = {{32{mem_old_val[31]}}, mem_old_val[31:0]};
+      operand_b_sext = {{32{reg_val[31]}}, reg_val[31:0]};
+      operand_a_zext = {32'b0, mem_old_val[31:0]};
+      operand_b_zext = {32'b0, reg_val[31:0]};
+    end else begin
+      operand_a_sext = $signed(mem_old_val);
+      operand_b_sext = $signed(reg_val);
+      operand_a_zext = $unsigned(mem_old_val);
+      operand_b_zext = $unsigned(reg_val);
+    end
+
+    // Default to returning the register operand (SWAP/SC path)
+    result64 = operand_b_zext;
+    adder_operand_a = {operand_a_sext[63], operand_a_sext};
+    adder_operand_b = {operand_b_sext[63], operand_b_sext};
+    adder_sum       = '0;
+
+    unique case (amo_kind)
+      AMO_SC, AMO_SWAP: begin
+        result64 = operand_b_zext;
+      end
+      AMO_ADD: begin
+        adder_sum = adder_operand_a + adder_operand_b;
+        result64 = adder_sum[63:0];
+      end
+      AMO_AND: result64 = operand_a_zext & operand_b_zext;
+      AMO_OR:  result64 = operand_a_zext | operand_b_zext;
+      AMO_XOR: result64 = operand_a_zext ^ operand_b_zext;
+      AMO_MAX: begin
+        adder_operand_b = -{operand_b_sext[63], operand_b_sext};
+        adder_sum       = adder_operand_a + adder_operand_b;
+        result64        = adder_sum[64] ? operand_b_zext : operand_a_zext;
+      end
+      AMO_MIN: begin
+        adder_operand_b = -{operand_b_sext[63], operand_b_sext};
+        adder_sum       = adder_operand_a + adder_operand_b;
+        result64        = adder_sum[64] ? operand_a_zext : operand_b_zext;
+      end
+      AMO_MAXU: begin
+        adder_operand_a = {1'b0, operand_a_zext};
+        adder_operand_b = -{1'b0, operand_b_zext};
+        adder_sum       = adder_operand_a + adder_operand_b;
+        result64        = adder_sum[64] ? operand_b_zext : operand_a_zext;
+      end
+      AMO_MINU: begin
+        adder_operand_a = {1'b0, operand_a_zext};
+        adder_operand_b = -{1'b0, operand_b_zext};
+        adder_sum       = adder_operand_a + adder_operand_b;
+        result64        = adder_sum[64] ? operand_a_zext : operand_b_zext;
+      end
+      default: begin
+        result64 = operand_b_zext;
+      end
+    endcase
+
+    if (is_word_op) begin
+      return {{CVA6Cfg.XLEN-32{1'b0}}, result64[31:0]};
+    end else begin
+      return result64[CVA6Cfg.XLEN-1:0];
+    end
   endfunction
 
   localparam logic [63:0] SMODE_STATUS_READ_MASK = ariane_pkg::smode_status_read_mask(CVA6Cfg);

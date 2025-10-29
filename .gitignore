@@ -53,3 +53,4 @@ Bender.lock
 !/vendor/riscv/riscv-isa-manual/build/
 !/vendor/riscv/riscv-isa-manual/build/*
 iti.trace
+build_result

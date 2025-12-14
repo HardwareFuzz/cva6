@@ -28,6 +28,8 @@ VLIB ?= vlib$(questa_version)
 VMAP ?= vmap$(questa_version)
 # verilator version
 verilator             ?= verilator
+COVERAGE              ?= 0
+EXTRA_VERILATOR_ARGS  ?=
 # traget option
 target-options ?=
 # additional defines
@@ -650,6 +652,10 @@ xrun-check-benchmarks:
 xrun-ci: xrun-asm-tests xrun-amo-tests xrun-mul-tests xrun-fp-tests xrun-benchmarks
 
 # verilator-specific
+coverage_flag :=
+ifneq ($(filter 1 true yes,$(COVERAGE)),)
+coverage_flag := --coverage
+endif
 verilate_command := $(verilator) --no-timing verilator_config.vlt                                                \
                     -f core/Flist.cva6                                                                           \
                     core/cva6_rvfi.sv                                                                            \
@@ -676,6 +682,8 @@ verilate_command := $(verilator) --no-timing verilator_config.vlt               
                     $(if $(DEBUG), --trace-structs,)                                                             \
                     $(if $(TRACE_COMPACT), --trace-fst $(VL_INC_DIR)/verilated_fst_c.cpp)                        \
                     $(if $(TRACE_FAST), --trace $(VL_INC_DIR)/verilated_vcd_c.cpp)                               \
+                    $(coverage_flag)                                                                             \
+                    $(EXTRA_VERILATOR_ARGS)                                                                      \
                     -LDFLAGS "-L$(RISCV)/lib -L$(SPIKE_INSTALL_DIR)/lib -Wl,-rpath,$(RISCV)/lib -Wl,-rpath,$(SPIKE_INSTALL_DIR)/lib -lfesvr -ldisasm -lyaml-cpp $(if $(PROFILE), -g -pg,) -lpthread $(if $(TRACE_COMPACT), -lz,)" \
                     -CFLAGS "$(CFLAGS)$(if $(PROFILE), -g -pg,) -DVL_DEBUG -I$(SPIKE_INSTALL_DIR)"               \
                     $(if $(SPIKE_TANDEM), +define+SPIKE_TANDEM, )                                                \

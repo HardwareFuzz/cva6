@@ -17,6 +17,7 @@
 
 #include "verilator.h"
 #include "verilated.h"
+#include "verilated_cov.h"
 #include "Variane_testharness.h"
 #if (VERILATOR_VERSION_INTEGER >= 5000000)
   // Verilator v5 adds $root wrapper that provides rootp pointer.
@@ -33,6 +34,7 @@
 #include <iostream>
 #include <iomanip>
 #include <string>
+#include <cstring>
 #include <getopt.h>
 #include <chrono>
 #include <ctime>
@@ -137,6 +139,9 @@ int main(int argc, char **argv) {
   bool print_cycles = false;
   // Port numbers are 16 bit unsigned integers.
   uint16_t rbb_port = 0;
+#if VM_COVERAGE
+  std::string cov_path = "logs/coverage.dat";
+#endif
 #if VM_TRACE
   FILE * vcdfile = NULL;
   char * fst_fname = NULL;
@@ -277,6 +282,21 @@ done_processing:
 
   const char *vcd_file = NULL;
   Verilated::commandArgs(argc, argv);
+#if VM_COVERAGE
+  if (const char* cov_arg = Verilated::commandArgsPlusMatch("covfile=")) {
+    const char* val = cov_arg + std::strlen("+covfile=");
+    if (*val) {
+      cov_path = val;
+    }
+  }
+  const auto slash_pos = cov_path.find_last_of('/');
+  if (slash_pos != std::string::npos && slash_pos != 0) {
+    Verilated::mkdir(cov_path.substr(0, slash_pos).c_str());
+  } else {
+    Verilated::mkdir("logs");
+  }
+  Verilated::threadContextp()->coveragep()->zero();
+#endif
 
   jtag = new remote_bitbang_t(rbb_port);
   dtm = new preload_aware_dtm_t(htif_argc, htif_argv);
@@ -396,6 +416,11 @@ done_processing:
   } else {
     fprintf(stderr, "%s *** SUCCESS *** (tohost = 0) after %ld cycles\n", htif_argv[1], main_time);
   }
+
+#if VM_COVERAGE
+  Verilated::threadContextp()->coveragep()->write(cov_path.c_str());
+  std::cout << "Coverage data written to " << cov_path << "\n";
+#endif
 
   if (dtm) delete dtm;
   if (jtag) delete jtag;

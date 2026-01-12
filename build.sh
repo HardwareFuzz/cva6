@@ -3,9 +3,9 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: ./build.sh [--coverage|--coverage-light|--no-coverage] [--clean] [--rv64] [--rv32] [--help] [-- extra_verilator_args...]
+Usage: ./build.sh [--coverage|--coverage-light|--no-coverage] [--clean] [--rv64] [--rv32] [--cores N] [--help] [-- extra_verilator_args...]
 
-Build the Verilator CVA6 testharness binaries. By default both RV64 (cv64a6_full_sv39)
+Build the Verilator CVA6 testharness binaries (default 2 cores). By default both RV64 (cv64a6_full_sv39)
 and RV32 (cv32a6_full_sv32) variants are built. Pass --coverage to generate
 coverage-instrumented binaries (_cov suffix), --coverage-light to generate
 line/user-only coverage binaries (_cov_light suffix). Extra arguments after "--" are
@@ -14,6 +14,7 @@ EOF
 }
 
 COVERAGE_MODE="${COVERAGE_MODE:-none}" # none|full|light
+CORES="${CORES:-2}"
 CLEAN=0
 TARGETS=()
 EXTRA_VERILATOR_ARGS=()
@@ -26,6 +27,7 @@ while [[ $# -gt 0 ]]; do
         --clean) CLEAN=1 ;;
         --rv64) TARGETS+=("cv64a6_full_sv39") ;;
         --rv32) TARGETS+=("cv32a6_full_sv32") ;;
+        --cores) CORES="$2"; shift ;;
         --help|-h) usage; exit 0 ;;
         --) shift; EXTRA_VERILATOR_ARGS+=("$@"); break ;;
         *) EXTRA_VERILATOR_ARGS+=("$1") ;;
@@ -52,7 +54,7 @@ build_target() {
         none) cov_suffix="" ;;
     esac
     local ver_dir="${BUILD_ROOT}/work-ver-${arch_label}${cov_suffix}"
-    local out_bin="${BUILD_ROOT}/cva6_${arch_label}${cov_suffix}"
+    local out_bin="${BUILD_ROOT}/cva6_${arch_label}_${CORES}c${cov_suffix}"
 
     if (( CLEAN )); then
         rm -rf "${ver_dir}" "${out_bin}"

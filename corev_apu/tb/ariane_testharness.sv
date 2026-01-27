@@ -42,6 +42,16 @@ module ariane_testharness #(
   output logic [31:0]                    exit_o
 );
 
+  // NOTE: Parameterize the number of cores from a macro if provided.
+  // This allows external build scripts (e.g. build.sh) to set the core count
+  // without editing this file.
+  // If CVA6_NUM_CORES is not defined, the parameter default (2) is used.
+  `ifdef CVA6_NUM_CORES
+    localparam int unsigned NUM_CORES_E = `CVA6_NUM_CORES;
+  `else
+    localparam int unsigned NUM_CORES_E = NUM_CORES;
+  `endif
+
   // RVFI
   localparam type rvfi_instr_t = `RVFI_INSTR_T(CVA6Cfg);
   localparam type rvfi_csr_elmt_t = `RVFI_CSR_ELMT_T(CVA6Cfg);
@@ -113,7 +123,7 @@ module ariane_testharness #(
     .AXI_DATA_WIDTH ( AXI_DATA_WIDTH          ),
     .AXI_ID_WIDTH   ( ariane_axi_soc::IdWidth ),
     .AXI_USER_WIDTH ( AXI_USER_WIDTH          )
-  ) core_bus[NUM_CORES-1:0]();
+  ) core_bus[NUM_CORES_E-1:0]();
 
   AXI_BUS #(
     .AXI_ADDR_WIDTH ( AXI_ADDRESS_WIDTH            ),
@@ -140,6 +150,19 @@ module ariane_testharness #(
     if (!$value$plusargs("jtag_rbb_enable=%b", jtag_enable)) jtag_enable = 'h0;
     if ($test$plusargs("debug_disable")) debug_enable = 'h0; else debug_enable = 'h1;
     if (CVA6Cfg.XLEN != 32 & CVA6Cfg.XLEN != 64) $error("CVA6Cfg.XLEN different from 32 and 64");
+  end
+
+  // Allow overriding the boot address to skip ROM for bare-metal tests.
+  // Default remains ROMBase to preserve existing behavior.
+  logic [CVA6Cfg.VLEN-1:0] boot_addr_0;
+  logic [CVA6Cfg.VLEN-1:0] boot_addr_1;
+  initial begin
+    boot_addr_0 = ariane_soc::ROMBase;
+    boot_addr_1 = ariane_soc::ROMBase;
+    if ($test$plusargs("boot_from_dram")) begin
+      boot_addr_0 = ariane_soc::DRAMBase;
+      boot_addr_1 = ariane_soc::DRAMBase;
+    end
   end
 
   // debug if MUX
@@ -550,8 +573,8 @@ module ariane_testharness #(
   // ---------------
   // CLINT
   // ---------------
-  logic [NUM_CORES-1:0] ipi;
-  logic [NUM_CORES-1:0] timer_irq;
+  logic [NUM_CORES_E-1:0] ipi;
+  logic [NUM_CORES_E-1:0] timer_irq;
 
   ariane_axi_soc::req_slv_t  axi_clint_req;
   ariane_axi_soc::resp_slv_t axi_clint_resp;
@@ -561,7 +584,7 @@ module ariane_testharness #(
     .AXI_ADDR_WIDTH ( AXI_ADDRESS_WIDTH            ),
     .AXI_DATA_WIDTH ( AXI_DATA_WIDTH               ),
     .AXI_ID_WIDTH   ( ariane_axi_soc::IdWidthSlave ),
-    .NR_CORES       ( NUM_CORES                    ),
+    .NR_CORES       ( NUM_CORES_E                  ),
     .axi_req_t      ( ariane_axi_soc::req_slv_t    ),
     .axi_resp_t     ( ariane_axi_soc::resp_slv_t   )
   ) i_clint (
@@ -626,26 +649,80 @@ module ariane_testharness #(
 
   uart_bus #(.BAUD_RATE(115200), .PARITY_EN(0)) i_uart_bus (.rx(tx), .tx(rx), .rx_en(1'b1));
 
-  axi_mux_intf #(
-    .SLV_AXI_ID_WIDTH ( ariane_axi_soc::IdWidth ),
-    .MST_AXI_ID_WIDTH ( ariane_axi_soc::IdWidth ),
-    .AXI_ADDR_WIDTH   ( AXI_ADDRESS_WIDTH       ),
-    .AXI_DATA_WIDTH   ( AXI_DATA_WIDTH          ),
-    .AXI_USER_WIDTH   ( AXI_USER_WIDTH          ),
-    .NO_SLV_PORTS     ( NUM_CORES               )
-  ) i_axi_core_mux (
-    .clk_i    ( clk_i      ),
-    .rst_ni   ( ndmreset_n ),
-    .test_i   ( test_en    ),
-    .slv      ( core_bus   ),
-    .mst      ( slave[0]   )
-  );
+  //
+  // Multi-core note:
+  // The upstream AXI mux requires extra ID bits to route responses back to the
+  // originating slave port. In verilator, width checks are often compiled out,
+  // and an under-provisioned ID width can lead to misrouted responses.
+  //
+  // To keep the shared SoC bus ID width unchanged (ariane_axi_soc::IdWidth), we
+  // remap each core's IDs to a narrower space and let the mux prepend the core
+  // index as the extra routing bit.
+  //
+  if (NUM_CORES_E > 1) begin : gen_axi_core_mux_mc
+    AXI_BUS #(
+      .AXI_ADDR_WIDTH ( AXI_ADDRESS_WIDTH           ),
+      .AXI_DATA_WIDTH ( AXI_DATA_WIDTH              ),
+      .AXI_ID_WIDTH   ( ariane_axi_soc::IdWidth - 1 ),
+      .AXI_USER_WIDTH ( AXI_USER_WIDTH              )
+    ) core_bus_narrow[NUM_CORES_E-1:0]();
+
+    for (genvar i = 0; i < NUM_CORES_E; i++) begin : gen_axi_iw
+      axi_iw_converter_intf #(
+        .AXI_SLV_PORT_ID_WIDTH        ( ariane_axi_soc::IdWidth       ),
+        .AXI_MST_PORT_ID_WIDTH        ( ariane_axi_soc::IdWidth - 1   ),
+        .AXI_SLV_PORT_MAX_UNIQ_IDS    ( 16                            ),
+        .AXI_SLV_PORT_MAX_TXNS_PER_ID ( 8                             ),
+        .AXI_SLV_PORT_MAX_TXNS        ( 32                            ),
+        .AXI_MST_PORT_MAX_UNIQ_IDS    ( 8                             ),
+        .AXI_MST_PORT_MAX_TXNS_PER_ID ( 8                             ),
+        .AXI_ADDR_WIDTH               ( AXI_ADDRESS_WIDTH             ),
+        .AXI_DATA_WIDTH               ( AXI_DATA_WIDTH                ),
+        .AXI_USER_WIDTH               ( AXI_USER_WIDTH                )
+      ) i_axi_iw_converter (
+        .clk_i  ( clk_i      ),
+        .rst_ni ( ndmreset_n ),
+        .slv    ( core_bus[i] ),
+        .mst    ( core_bus_narrow[i] )
+      );
+    end
+
+    axi_mux_intf #(
+      .SLV_AXI_ID_WIDTH ( ariane_axi_soc::IdWidth - 1 ),
+      .MST_AXI_ID_WIDTH ( ariane_axi_soc::IdWidth     ),
+      .AXI_ADDR_WIDTH   ( AXI_ADDRESS_WIDTH           ),
+      .AXI_DATA_WIDTH   ( AXI_DATA_WIDTH              ),
+      .AXI_USER_WIDTH   ( AXI_USER_WIDTH              ),
+      .NO_SLV_PORTS     ( NUM_CORES_E                 )
+    ) i_axi_core_mux (
+      .clk_i    ( clk_i          ),
+      .rst_ni   ( ndmreset_n     ),
+      .test_i   ( test_en        ),
+      .slv      ( core_bus_narrow ),
+      .mst      ( slave[0]       )
+    );
+  end else begin : gen_axi_core_mux_sc
+    axi_mux_intf #(
+      .SLV_AXI_ID_WIDTH ( ariane_axi_soc::IdWidth ),
+      .MST_AXI_ID_WIDTH ( ariane_axi_soc::IdWidth ),
+      .AXI_ADDR_WIDTH   ( AXI_ADDRESS_WIDTH       ),
+      .AXI_DATA_WIDTH   ( AXI_DATA_WIDTH          ),
+      .AXI_USER_WIDTH   ( AXI_USER_WIDTH          ),
+      .NO_SLV_PORTS     ( NUM_CORES_E             )
+    ) i_axi_core_mux (
+      .clk_i    ( clk_i      ),
+      .rst_ni   ( ndmreset_n ),
+      .test_i   ( test_en    ),
+      .slv      ( core_bus   ),
+      .mst      ( slave[0]   )
+    );
+  end
 
   // ---------------
   // Core
   // ---------------
-  ariane_axi::req_t    axi_ariane_req [NUM_CORES];
-  ariane_axi::resp_t   axi_ariane_resp [NUM_CORES];
+  ariane_axi::req_t    axi_ariane_req [NUM_CORES_E];
+  ariane_axi::resp_t   axi_ariane_resp [NUM_CORES_E];
   rvfi_probes_t rvfi_probes;
   rvfi_probes_t rvfi_probes_1;
   rvfi_csr_t rvfi_csr;
@@ -668,7 +745,7 @@ module ariane_testharness #(
   ) i_ariane_0 (
     .clk_i                ( clk_i               ),
     .rst_ni               ( ndmreset_n          ),
-    .boot_addr_i          ( ariane_soc::ROMBase ), // start fetching from ROM
+    .boot_addr_i          ( boot_addr_0         ),
     .hart_id_i            ( '0                  ),
     .irq_i                ( irqs                ),
     .ipi_i                ( ipi[0]              ),
@@ -694,7 +771,7 @@ module ariane_testharness #(
   ) i_ariane_1 (
     .clk_i                ( clk_i               ),
     .rst_ni               ( ndmreset_n          ),
-    .boot_addr_i          ( ariane_soc::ROMBase ),
+    .boot_addr_i          ( boot_addr_1         ),
     .hart_id_i            ( {{(CVA6Cfg.XLEN-1){1'b0}}, 1'b1} ),
     .irq_i                ( irqs                ),
     .ipi_i                ( ipi[1]              ),

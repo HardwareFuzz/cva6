@@ -81,7 +81,7 @@ build_target() {
         target="${target}" \
         ver-library="${ver_dir}" \
         COVERAGE="${cov_flag}" \
-        EXTRA_VERILATOR_ARGS="${extra_args[*]}" \
+        EXTRA_VERILATOR_ARGS="${extra_args[*]} +define+CVA6_NUM_CORES=${CORES}" \
         verilator="${VERILATOR_BIN}"
 
     cp "${ver_dir}/Variane_testharness" "${out_bin}"

@@ -36,7 +36,7 @@
 	url = https://github.com/pulp-platform/common_verification.git
 [submodule "verif/core-v-verif"]
 	path = verif/core-v-verif
-	url = https://github.com/openhwgroup/core-v-verif
+	url = https://github.com/HardwareFuzz/core-v-verif.git
 [submodule "core/cvfpu"]
 	path = core/cvfpu
 	url = https://github.com/HardwareFuzz/cvfpu.git

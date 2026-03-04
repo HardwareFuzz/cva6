@@ -78,6 +78,7 @@ module ariane_testharness #(
   logic [31:0] jtag_exit, dmi_exit;
   logic [31:0] rvfi_exit;
   logic [31:0] tracer_exit;
+  logic [31:0] tracer_exit_1;
   logic [31:0] tandem_exit;
 
   logic        jtag_TCK;
@@ -726,8 +727,11 @@ module ariane_testharness #(
   rvfi_probes_t rvfi_probes;
   rvfi_probes_t rvfi_probes_1;
   rvfi_csr_t rvfi_csr;
+  rvfi_csr_t rvfi_csr_1;
   rvfi_instr_t [CVA6Cfg.NrCommitPorts-1:0]  rvfi_instr;
+  rvfi_instr_t [CVA6Cfg.NrCommitPorts-1:0]  rvfi_instr_1;
   rvfi_to_iti_t rvfi_to_iti;
+  rvfi_to_iti_t rvfi_to_iti_1;
   iti_to_encoder_t iti_to_encoder;
 
   `AXI_ASSIGN_FROM_REQ(core_bus[0], axi_ariane_req[0])
@@ -835,6 +839,23 @@ module ariane_testharness #(
       .rvfi_csr_o   (rvfi_csr)
   );
 
+  cva6_rvfi #(
+      .CVA6Cfg   (CVA6Cfg),
+      .rvfi_instr_t(rvfi_instr_t),
+      .rvfi_csr_t(rvfi_csr_t),
+      .rvfi_probes_instr_t(rvfi_probes_instr_t),
+      .rvfi_probes_csr_t(rvfi_probes_csr_t),
+      .rvfi_probes_t(rvfi_probes_t),
+      .rvfi_to_iti_t(rvfi_to_iti_t)
+  ) i_cva6_rvfi_1 (
+      .clk_i        (clk_i),
+      .rst_ni       (rst_ni),
+      .rvfi_probes_i(rvfi_probes_1),
+      .rvfi_instr_o (rvfi_instr_1),
+      .rvfi_to_iti_o   (rvfi_to_iti_1),
+      .rvfi_csr_o   (rvfi_csr_1)
+  );
+
   rvfi_tracer  #(
     .CVA6Cfg(CVA6Cfg),
     .rvfi_instr_t(rvfi_instr_t),
@@ -849,6 +870,21 @@ module ariane_testharness #(
     .rvfi_i(rvfi_instr),
     .rvfi_csr_i(rvfi_csr),
     .end_of_test_o(tracer_exit)
+  );
+
+  rvfi_tracer  #(
+    .CVA6Cfg(CVA6Cfg),
+    .rvfi_instr_t(rvfi_instr_t),
+    .rvfi_csr_t(rvfi_csr_t),
+    .HART_ID(1),
+    .DEBUG_START(0),
+    .DEBUG_STOP(0)
+  ) i_rvfi_tracer_1 (
+    .clk_i(clk_i),
+    .rst_ni(rst_ni),
+    .rvfi_i(rvfi_instr_1),
+    .rvfi_csr_i(rvfi_csr_1),
+    .end_of_test_o(tracer_exit_1)
   );
 
 `ifdef SPIKE_TANDEM

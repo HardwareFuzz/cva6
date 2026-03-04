@@ -257,6 +257,10 @@ module rvfi_tracer #(
       end
     end
 
+    // ariane_tb.cpp exits the process via `_exit(ret)`, which bypasses buffered FILE flushes.
+    // Flush once per cycle so RVFI traces are durable even if simulation terminates immediately.
+    $fflush(f);
+
     if (~rst_ni)
       cycles <= 0;
     else

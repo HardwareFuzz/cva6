@@ -31,7 +31,26 @@ module cva6_iti #(
   // pragma translate_off
   int f;
   initial begin
-    f = $fopen("iti.traces", "w");
+    string trace_dir;
+    string path_prefix;
+    string trace_fname;
+
+    if (!$value$plusargs("iti_trace_file=%s", trace_fname)) begin
+      if ($value$plusargs("trace_log_dir=%s", trace_dir)) begin
+        path_prefix = trace_dir;
+        if (path_prefix.len() != 0 && path_prefix[path_prefix.len()-1] != 8'd47) begin
+          path_prefix = {path_prefix, "/"};
+        end
+        trace_fname = {path_prefix, "iti.trace"};
+      end else begin
+        trace_fname = "iti.trace";
+      end
+    end
+
+    f = $fopen(trace_fname, "w");
+    if (f == 0) begin
+      $fatal(1, "*** [cva6_iti] ERROR: Unable to open ITI trace file '%s'", trace_fname);
+    end
     $fwrite(f, "itype_0,cause,tval,priv,iaddr_0,context,ctype,iretire_0,ilastsize_0\n");
   end
   final $fclose(f);

@@ -555,7 +555,7 @@ module fpu_wrap
         .out_valid_o   (fpu_out_valid),
         .out_ready_i   (fpu_out_ready),
         .busy_o        (  /* unused */),
-        .early_valid_o (fpu_early_valid_o)
+        .early_valid_o (  /* unused */)
     );
 
     // Pack status flag into exception cause, tval ignored in wb, exception is always invalid
@@ -568,6 +568,9 @@ module fpu_wrap
 
     // Downstream valid from unit
     assign fpu_valid_o = fpu_out_valid;
+
+    // fpnew no longer provides a meaningful early_valid for this wrapper.
+    assign fpu_early_valid_o = 1'b0;
 
   end
 endmodule

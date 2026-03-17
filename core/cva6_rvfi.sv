@@ -54,8 +54,10 @@ module cva6_rvfi
   // back to memory. This is post-alignment data (lower bytes contain the payload) so
   // the tracer can rotate it using the write mask and address offset.
   function automatic logic [CVA6Cfg.XLEN-1:0] compute_amo_wdata(
-      input fu_op amo_op, input logic [CVA6Cfg.XLEN-1:0] mem_old_val,
-      input logic [CVA6Cfg.XLEN-1:0] reg_val);
+      input fu_op amo_op,
+      input logic [CVA6Cfg.XLEN-1:0] mem_old_val,
+      input logic [CVA6Cfg.XLEN-1:0] reg_val
+  );
     ariane_pkg::amo_t amo_kind;
     logic is_word_op;
     logic [63:0] operand_a_sext, operand_b_sext;
@@ -67,98 +69,29 @@ module cva6_rvfi
     amo_kind   = AMO_NONE;
     is_word_op = 1'b0;
     unique case (amo_op)
-      AMO_LRW: begin
-        amo_kind   = AMO_LR;
-        is_word_op = 1'b1;
-      end
-      AMO_LRD: begin
-        amo_kind   = AMO_LR;
-        is_word_op = 1'b0;
-      end
-      AMO_SCW: begin
-        amo_kind   = AMO_SC;
-        is_word_op = 1'b1;
-      end
-      AMO_SCD: begin
-        amo_kind   = AMO_SC;
-        is_word_op = 1'b0;
-      end
-      AMO_SWAPW: begin
-        amo_kind   = AMO_SWAP;
-        is_word_op = 1'b1;
-      end
-      AMO_SWAPD: begin
-        amo_kind   = AMO_SWAP;
-        is_word_op = 1'b0;
-      end
-      AMO_ADDW: begin
-        amo_kind   = AMO_ADD;
-        is_word_op = 1'b1;
-      end
-      AMO_ADDD: begin
-        amo_kind   = AMO_ADD;
-        is_word_op = 1'b0;
-      end
-      AMO_ANDW: begin
-        amo_kind   = AMO_AND;
-        is_word_op = 1'b1;
-      end
-      AMO_ANDD: begin
-        amo_kind   = AMO_AND;
-        is_word_op = 1'b0;
-      end
-      AMO_ORW: begin
-        amo_kind   = AMO_OR;
-        is_word_op = 1'b1;
-      end
-      AMO_ORD: begin
-        amo_kind   = AMO_OR;
-        is_word_op = 1'b0;
-      end
-      AMO_XORW: begin
-        amo_kind   = AMO_XOR;
-        is_word_op = 1'b1;
-      end
-      AMO_XORD: begin
-        amo_kind   = AMO_XOR;
-        is_word_op = 1'b0;
-      end
-      AMO_MAXW: begin
-        amo_kind   = AMO_MAX;
-        is_word_op = 1'b1;
-      end
-      AMO_MAXD: begin
-        amo_kind   = AMO_MAX;
-        is_word_op = 1'b0;
-      end
-      AMO_MAXWU: begin
-        amo_kind   = AMO_MAXU;
-        is_word_op = 1'b1;
-      end
-      AMO_MAXDU: begin
-        amo_kind   = AMO_MAXU;
-        is_word_op = 1'b0;
-      end
-      AMO_MINW: begin
-        amo_kind   = AMO_MIN;
-        is_word_op = 1'b1;
-      end
-      AMO_MIND: begin
-        amo_kind   = AMO_MIN;
-        is_word_op = 1'b0;
-      end
-      AMO_MINWU: begin
-        amo_kind   = AMO_MINU;
-        is_word_op = 1'b1;
-      end
-      AMO_MINDU: begin
-        amo_kind   = AMO_MINU;
-        is_word_op = 1'b0;
-      end
-      default: begin
-        amo_kind   = AMO_NONE;
-        is_word_op = 1'b0;
-      end
+      AMO_LRW:     begin amo_kind = AMO_LR;   is_word_op = 1'b1; end
+      AMO_LRD:     begin amo_kind = AMO_LR;   is_word_op = 1'b0; end
+      AMO_SCW:     begin amo_kind = AMO_SC;   is_word_op = 1'b1; end
+      AMO_SCD:     begin amo_kind = AMO_SC;   is_word_op = 1'b0; end
+      AMO_SWAPW:   begin amo_kind = AMO_SWAP; is_word_op = 1'b1; end
+      AMO_SWAPD:   begin amo_kind = AMO_SWAP; is_word_op = 1'b0; end
+      AMO_ADDW:    begin amo_kind = AMO_ADD;  is_word_op = 1'b1; end
+      AMO_ADDD:    begin amo_kind = AMO_ADD;  is_word_op = 1'b0; end
+      AMO_ANDW:    begin amo_kind = AMO_AND;  is_word_op = 1'b1; end
+      AMO_ANDD:    begin amo_kind = AMO_AND;  is_word_op = 1'b0; end
+      AMO_ORW:     begin amo_kind = AMO_OR;   is_word_op = 1'b1; end
+      AMO_ORD:     begin amo_kind = AMO_OR;   is_word_op = 1'b0; end
+      AMO_XORW:    begin amo_kind = AMO_XOR;  is_word_op = 1'b1; end
+      AMO_XORD:    begin amo_kind = AMO_XOR;  is_word_op = 1'b0; end
+      AMO_MAXW:    begin amo_kind = AMO_MAX;  is_word_op = 1'b1; end
+      AMO_MAXD:    begin amo_kind = AMO_MAX;  is_word_op = 1'b0; end
+      AMO_MAXWU:   begin amo_kind = AMO_MAXU; is_word_op = 1'b1; end
+      AMO_MAXDU:   begin amo_kind = AMO_MAXU; is_word_op = 1'b0; end
+      AMO_MINW:    begin amo_kind = AMO_MIN;  is_word_op = 1'b1; end
+      AMO_MIND:    begin amo_kind = AMO_MIN;  is_word_op = 1'b0; end
+      AMO_MINWU:   begin amo_kind = AMO_MINU; is_word_op = 1'b1; end
+      AMO_MINDU:   begin amo_kind = AMO_MINU; is_word_op = 1'b0; end
+      default:     begin amo_kind = AMO_NONE; is_word_op = 1'b0; end
     endcase
 
     // Create signed and unsigned 64-bit views of the operands (word ops use 32-bit payloads)
@@ -175,7 +108,7 @@ module cva6_rvfi
     end
 
     // Default to returning the register operand (SWAP/SC path)
-    result64        = operand_b_zext;
+    result64 = operand_b_zext;
     adder_operand_a = {operand_a_sext[63], operand_a_sext};
     adder_operand_b = {operand_b_sext[63], operand_b_sext};
     adder_sum       = '0;
@@ -186,7 +119,7 @@ module cva6_rvfi
       end
       AMO_ADD: begin
         adder_sum = adder_operand_a + adder_operand_b;
-        result64  = adder_sum[63:0];
+        result64 = adder_sum[63:0];
       end
       AMO_AND: result64 = operand_a_zext & operand_b_zext;
       AMO_OR:  result64 = operand_a_zext | operand_b_zext;
@@ -522,19 +455,17 @@ module cva6_rvfi
       // So far, only write paddr is reported. TODO: read paddr
       rvfi_instr_o[i].mem_paddr <= mem_paddr;
       rvfi_instr_o[i].mem_wmask <= mem_q[commit_pointer[i]].lsu_wmask;
-
       // For AMO operations, compute the actual write value
       // Note: AMO operations write a computed value to memory, not the original register value
       if (is_amo(commit_instr_op[i])) begin
         rvfi_instr_o[i].mem_wdata <= compute_amo_wdata(
-            commit_instr_op[i],  // AMO operation type
-            wdata[i],  // Old memory value (the value returned to rd)
-            mem_q[commit_pointer[i]].rs2_rdata  // Register operand (rs2)
+            commit_instr_op[i],                    // AMO operation type
+            wdata[i],                              // Old memory value (the value returned to rd)
+            mem_q[commit_pointer[i]].rs2_rdata     // Register operand (rs2)
         );
       end else begin
         rvfi_instr_o[i].mem_wdata <= mem_q[commit_pointer[i]].lsu_wdata;
       end
-
       rvfi_instr_o[i].mem_rmask <= mem_q[commit_pointer[i]].lsu_rmask;
       rvfi_instr_o[i].mem_rdata <= commit_instr_result[i];
       rvfi_instr_o[i].rs1_rdata <= mem_q[commit_pointer[i]].rs1_rdata;

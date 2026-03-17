@@ -503,6 +503,13 @@ class instr_trace_item #(
                 logic [CVA6Cfg.VLEN-1:0] vaddress = gp_reg_file[read_regs[0]] + this.imm;
                 s = $sformatf("%s VA: %x PA: %x", s, vaddress, this.paddr);
             end
+
+            // AMO instructions (both read and write memory)
+            instr_tracer_pkg::INSTR_AMO: begin
+                // For AMO, the address is in rs1 (read_regs[2]), with no offset (imm=0)
+                logic [CVA6Cfg.VLEN-1:0] vaddress = gp_reg_file[read_regs[2]] + this.imm;
+                s = $sformatf("%s VA: %x PA: %x", s, vaddress, this.paddr);
+            end
         endcase
         return s;
     endfunction : printInstr

@@ -55,12 +55,16 @@
 // allow modulus.  You can also use a double, if you wish.
 static vluint64_t main_time = 0;
 
-static const char *verilog_plusargs[] = {"jtag_rbb_enable", "time_out", "debug_disable"};
+static const char *verilog_plusargs[] = {"jtag_rbb_enable", "time_out", "debug_disable", "boot_from_dram"};
 
 extern dtm_t* dtm;
 extern remote_bitbang_t * jtag;
 
+static volatile sig_atomic_t got_sigterm = 0;
+
 void handle_sigterm(int sig) {
+  (void)sig;
+  got_sigterm = 1;
   dtm->stop();
 }
 
@@ -131,14 +135,15 @@ class preload_aware_dtm_t : public dtm_t {
 int main(int argc, char **argv) {
   std::clock_t c_start = std::clock();
   auto t_start = std::chrono::high_resolution_clock::now();
-  bool verbose;
-  bool perf;
+  bool verbose = false;
+  bool perf = false;
   unsigned random_seed = (unsigned)time(NULL) ^ (unsigned)getpid();
   uint64_t max_cycles = -1;
   int ret = 0;
   bool print_cycles = false;
   // Port numbers are 16 bit unsigned integers.
   uint16_t rbb_port = 0;
+  bool rbb_port_set = false;
 #if VM_COVERAGE
   std::string cov_path = "logs/coverage.dat";
 #endif
@@ -180,7 +185,7 @@ int main(int argc, char **argv) {
       case 'h': usage(argv[0]);             return 0;
       case 'm': max_cycles = atoll(optarg); break;
       case 's': random_seed = atoi(optarg); break;
-      case 'r': rbb_port = atoi(optarg);    break;
+      case 'r': rbb_port = atoi(optarg); rbb_port_set = true; break;
       case 'V': verbose = true;             break;
       case 'p': perf = true;                break;
 #if VM_TRACE
@@ -298,7 +303,16 @@ done_processing:
   Verilated::threadContextp()->coveragep()->zero();
 #endif
 
-  jtag = new remote_bitbang_t(rbb_port);
+  // Only create the remote-bitbang server when explicitly requested.
+  // Default behavior is to keep it disabled to avoid socket overhead.
+  bool enable_rbb = rbb_port_set;
+  if (const char* en_arg = Verilated::commandArgsPlusMatch("jtag_rbb_enable=")) {
+    const char* val = en_arg + std::strlen("+jtag_rbb_enable=");
+    if (*val) {
+      enable_rbb = enable_rbb || (atoi(val) != 0);
+    }
+  }
+  jtag = enable_rbb ? new remote_bitbang_t(rbb_port) : nullptr;
   dtm = new preload_aware_dtm_t(htif_argc, htif_argv);
   signal(SIGTERM, handle_sigterm);
 
@@ -375,7 +389,7 @@ done_processing:
         }
   }
 
-  while (!dtm->done() && !jtag->done() && !(top->exit_o & 0x1)) {
+  while (!dtm->done() && !(jtag && jtag->done()) && !(top->exit_o & 0x1)) {
     top->clk_i = 0;
     top->eval();
 #if VM_TRACE
@@ -403,10 +417,16 @@ done_processing:
     fclose(vcdfile);
 #endif
 
+  // If the host sent SIGTERM (e.g. via `timeout`), avoid reporting a false PASS.
+  if (got_sigterm && !(top->exit_o & 0x1)) {
+    fprintf(stderr, "%s *** FAILED *** (SIGTERM) after %ld cycles\n", htif_argv[1], main_time);
+    _exit(124);
+  }
+
   if (dtm->exit_code()) {
     fprintf(stderr, "%s *** FAILED *** (tohost = %d) after %ld cycles\n", htif_argv[1], dtm->exit_code(), main_time);
     ret = dtm->exit_code();
-  } else if (jtag->exit_code()) {
+  } else if (jtag && jtag->exit_code()) {
     fprintf(stderr, "%s *** FAILED *** (tohost = %d, seed %d) after %ld cycles\n", htif_argv[1], jtag->exit_code(), random_seed, main_time);
     ret = jtag->exit_code();
   } else if (top->exit_o & 0xFFFFFFFE) {
@@ -422,8 +442,8 @@ done_processing:
   std::cout << "Coverage data written to " << cov_path << "\n";
 #endif
 
-  if (dtm) delete dtm;
-  if (jtag) delete jtag;
+  // Avoid potential destructor hangs in fesvr/JTAG helpers.
+  // The OS will reclaim resources on process exit.
 
   std::clock_t c_end = std::clock();
   auto t_end = std::chrono::high_resolution_clock::now();
@@ -436,5 +456,5 @@ done_processing:
               << " ms\n";
   }
 
-  return ret;
+  _exit(ret);
 }

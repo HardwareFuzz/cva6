@@ -193,6 +193,10 @@ src :=  $(if $(spike-tandem),verif/tb/core/uvma_core_cntrl_pkg.sv)              
         vendor/pulp-platform/axi/src/axi_delayer.sv                                  \
         vendor/pulp-platform/axi/src/axi_to_axi_lite.sv                              \
         vendor/pulp-platform/axi/src/axi_id_prepend.sv                               \
+        vendor/pulp-platform/axi/src/axi_id_remap.sv                                 \
+        vendor/pulp-platform/axi/src/axi_serializer.sv                               \
+        vendor/pulp-platform/axi/src/axi_id_serialize.sv                             \
+        vendor/pulp-platform/axi/src/axi_iw_converter.sv                             \
         vendor/pulp-platform/axi/src/axi_atop_filter.sv                              \
         vendor/pulp-platform/axi/src/axi_err_slv.sv                                  \
         vendor/pulp-platform/axi/src/axi_mux.sv                                      \

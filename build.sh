@@ -20,7 +20,7 @@ Unsupported in this repo:
   rv64f    (no rv64 config with RVD=0)
 
 Notes:
-  - This branch supports --cores 1 only. Use cx-2hart-build for multi-hart.
+  - --cores controls the CVA6_NUM_CORES macro passed to Verilator.
   - Use --out-dir (or env CX_OUT_DIR / OUT_DIR) to place final binaries in a
     shared artifacts folder. Intermediate Verilator work dirs stay under build_result/.
 
@@ -71,11 +71,6 @@ mkdir -p "$BUILD_ROOT" "$OUT_DIR"
 
 if [[ ! "$CORES" =~ ^[0-9]+$ ]] || (( CORES < 1 )); then
     echo "Invalid --cores: $CORES" >&2
-    exit 2
-fi
-if (( CORES != 1 )); then
-    echo "This branch supports --cores 1 only (requested: $CORES)." >&2
-    echo "Use cx-2hart-build for multi-hart builds." >&2
     exit 2
 fi
 

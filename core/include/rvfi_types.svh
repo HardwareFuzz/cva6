@@ -126,6 +126,7 @@
   logic [Cfg.PLEN-1:0] mem_paddr; \
   logic debug_mode; \
   logic [Cfg.NrCommitPorts-1:0][Cfg.XLEN-1:0] wdata; \
+  logic [Cfg.NrCommitPorts-1:0][63:0] commit_start_cycle; \
   logic branch_valid; \
   logic is_taken; \
   logic [Cfg.XLEN-1:0] tval; \

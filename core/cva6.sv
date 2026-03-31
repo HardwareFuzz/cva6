@@ -1875,6 +1875,8 @@ module cva6
       .rvfi_probes_t      (rvfi_probes_t)
   ) i_cva6_rvfi_probes (
 
+      .clk_i              (clk_i),
+      .rst_ni             (rst_ni),
       .flush_i            (flush_ctrl_if),
       .issue_instr_ack_i  (issue_instr_issue_id),
       .fetch_entry_valid_i(fetch_valid_if_id),

@@ -93,14 +93,9 @@ module rvfi_tracer #(
 
   final $fclose(f);
 
-  logic [31:0] cycles;
+  logic [63:0] cycles;
   rvfi_probes_instr_t instr;
-  logic [CVA6Cfg.NrIssuePorts-1:0][CVA6Cfg.TRANS_ID_BITS-1:0] issue_pointer;
-  logic [CVA6Cfg.NrCommitPorts-1:0][CVA6Cfg.TRANS_ID_BITS-1:0] commit_pointer;
-  logic flush_unissued_instr;
-  logic [CVA6Cfg.NrIssuePorts-1:0] decoded_instr_valid;
-  logic [CVA6Cfg.NrIssuePorts-1:0] decoded_instr_ack;
-  logic [63:0] issue_start_cycles_q [CVA6Cfg.NR_SB_ENTRIES];
+  logic [CVA6Cfg.NrCommitPorts-1:0][63:0] commit_start_cycle;
   // Generate the trace based on RVFI
   logic [63:0] pc64;
   string cause;
@@ -117,11 +112,7 @@ module rvfi_tracer #(
     end
   end
 
-  assign issue_pointer = instr.issue_pointer;
-  assign commit_pointer = instr.commit_pointer;
-  assign flush_unissued_instr = instr.flush_unissued_instr;
-  assign decoded_instr_valid = instr.decoded_instr_valid;
-  assign decoded_instr_ack = instr.decoded_instr_ack;
+  assign commit_start_cycle = instr.commit_start_cycle;
 
   function automatic logic [CVA6Cfg.XLEN-1:0] align_mem_wdata(
     input logic [CVA6Cfg.XLEN-1:0] raw_wdata,
@@ -186,7 +177,7 @@ module rvfi_tracer #(
       for (int i = 0; i < CVA6Cfg.NrCommitPorts; i++) begin
         logic [63:0] clk_start;
         pc64 = {{CVA6Cfg.XLEN-CVA6Cfg.VLEN{rvfi_i[i].pc_rdata[CVA6Cfg.VLEN-1]}}, rvfi_i[i].pc_rdata};
-        clk_start = issue_start_cycles_q[commit_pointer[i]];
+        clk_start = (commit_start_cycle[i] != 64'd0) ? commit_start_cycle[i] : clk_end;
         // print the instruction information if the instruction is valid or a trap is taken
         if (rvfi_i[i].valid) begin
           logic dest_is_fp;
@@ -293,16 +284,8 @@ module rvfi_tracer #(
 
     if (~rst_ni) begin
       cycles <= 0;
-      for (int entry = 0; entry < CVA6Cfg.NR_SB_ENTRIES; entry++) begin
-        issue_start_cycles_q[entry] <= 64'd0;
-      end
     end else begin
       cycles <= cycles+1;
-      for (int issue = 0; issue < CVA6Cfg.NrIssuePorts; issue++) begin
-        if (decoded_instr_valid[issue] && decoded_instr_ack[issue] && !flush_unissued_instr) begin
-          issue_start_cycles_q[issue_pointer[issue]] <= clk_end;
-        end
-      end
     end
     if (cycles > SIM_FINISH)
       end_of_test_q <= 32'hffff_ffff;

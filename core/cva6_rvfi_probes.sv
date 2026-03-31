@@ -23,6 +23,8 @@ module cva6_rvfi_probes
 
 ) (
 
+    input logic                                  clk_i,
+    input logic                                  rst_ni,
     input logic                                  flush_i,
     input logic [CVA6Cfg.NrIssuePorts-1:0]       issue_instr_ack_i,
     input logic [CVA6Cfg.NrIssuePorts-1:0]       fetch_entry_valid_i,
@@ -62,6 +64,8 @@ module cva6_rvfi_probes
 
   rvfi_probes_csr_t   csr;
   rvfi_probes_instr_t instr;
+  logic [63:0] trace_cycle_q;
+  logic [63:0] issue_start_cycles_q [CVA6Cfg.NR_SB_ENTRIES];
 
   always_comb begin
     csr = '0;
@@ -121,9 +125,35 @@ module cva6_rvfi_probes
     instr.is_taken = resolved_branch_i.is_taken;
     instr.branch_trans_id = flu_trans_id_ex_id_i;
 
+    for (int i = 0; i < CVA6Cfg.NrCommitPorts; i++) begin
+      instr.commit_start_cycle[i] = issue_start_cycles_q[commit_pointer_i[i]];
+    end
+
     csr = csr_i;
     csr.mip_q = csr_i.mip_q | ({{CVA6Cfg.XLEN - 1{1'b0}}, CVA6Cfg.RVS && irq_i[1]} << riscv::IRQ_S_EXT);
 
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      trace_cycle_q <= 64'd0;
+      for (int entry = 0; entry < CVA6Cfg.NR_SB_ENTRIES; entry++) begin
+        issue_start_cycles_q[entry] <= 64'd0;
+      end
+    end else begin
+      trace_cycle_q <= trace_cycle_q + 64'd1;
+      if (flush_i) begin
+        for (int entry = 0; entry < CVA6Cfg.NR_SB_ENTRIES; entry++) begin
+          issue_start_cycles_q[entry] <= 64'd0;
+        end
+      end else begin
+        for (int issue = 0; issue < CVA6Cfg.NrIssuePorts; issue++) begin
+          if (decoded_instr_valid_i[issue] && decoded_instr_ack_i[issue] && !flush_unissued_instr_i) begin
+            issue_start_cycles_q[issue_pointer_i[issue]] <= trace_cycle_q + 64'd1;
+          end
+        end
+      end
+    end
   end
 
 
@@ -142,4 +172,3 @@ module cva6_rvfi_probes
 
 
 endmodule
-

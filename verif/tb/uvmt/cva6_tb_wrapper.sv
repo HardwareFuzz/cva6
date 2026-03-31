@@ -146,6 +146,8 @@ module cva6_tb_wrapper import uvmt_cva6_pkg::*; #(
     .CVA6Cfg(CVA6Cfg),
     .rvfi_instr_t(rvfi_instr_t),
     .rvfi_csr_t(rvfi_csr_t),
+    .rvfi_probes_instr_t(rvfi_probes_instr_t),
+    .rvfi_probes_t(rvfi_probes_t),
     //
     .HART_ID(8'h0),
     .DEBUG_START(0),
@@ -155,6 +157,7 @@ module cva6_tb_wrapper import uvmt_cva6_pkg::*; #(
     .rst_ni(rst_ni),
     .rvfi_i(rvfi_instr),
     .rvfi_csr_i(rvfi_csr),
+    .rvfi_probes_i(rvfi_probes),
     .end_of_test_o(tb_exit_o)
   ) ;
 

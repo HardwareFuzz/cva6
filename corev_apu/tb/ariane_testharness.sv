@@ -972,6 +972,8 @@ module ariane_testharness #(
     .CVA6Cfg(CVA6Cfg),
     .rvfi_instr_t(rvfi_instr_t),
     .rvfi_csr_t(rvfi_csr_t),
+    .rvfi_probes_instr_t(rvfi_probes_instr_t),
+    .rvfi_probes_t(rvfi_probes_t),
     .HART_ID(1),
     .DEBUG_START(0),
     .DEBUG_STOP(0)
@@ -980,6 +982,7 @@ module ariane_testharness #(
     .rst_ni(rst_ni),
     .rvfi_i(rvfi_instr_1),
     .rvfi_csr_i(rvfi_csr_1),
+    .rvfi_probes_i(rvfi_probes_1),
     .end_of_test_o(tracer_exit_1)
   );
 

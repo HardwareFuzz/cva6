@@ -132,6 +132,7 @@ module cva6_hpdcache_if_adapter
       hpdcache_req_offset_t        amo_addr_offset;
       hpdcache_tag_t               amo_tag;
       logic amo_is_word, amo_is_word_hi;
+      logic                    [1:0] amo_req_size;
       logic                           [63:0] amo_data;
       logic                           [ 7:0] amo_data_be;
       hpdcache_pkg::hpdcache_req_op_t        amo_op;
@@ -237,12 +238,18 @@ module cva6_hpdcache_if_adapter
           }
       );
 
-      assign amo_is_word = (cva6_amo_req_i.size == 2'b10);
-      assign amo_is_word_hi = cva6_amo_req_i.operand_a[2];
       if (CVA6Cfg.XLEN == 64) begin : amo_data_64_gen
+        assign amo_req_size = cva6_amo_req_i.size;
+        assign amo_is_word = (amo_req_size == 2'b10);
+        assign amo_is_word_hi = cva6_amo_req_i.operand_a[2];
         assign amo_data    = amo_is_word ? {2{cva6_amo_req_i.operand_b[0+:32]}} : cva6_amo_req_i.operand_b;
         assign amo_data_be = amo_is_word_hi ? 8'hf0 : amo_is_word ? 8'h0f : 8'hff;
       end else begin : amo_data_32_gen
+        // RV32A only defines word-sized AMOs. Keep the HPDcache size field normalized
+        // to a 32-bit request even if upstream transiently presents a wider/default code.
+        assign amo_req_size = 2'b10;
+        assign amo_is_word = 1'b1;
+        assign amo_is_word_hi = 1'b0;
         assign amo_data    = {32'b0, cva6_amo_req_i.operand_b};
         assign amo_data_be = 8'h0f;
       end
@@ -252,7 +259,7 @@ module cva6_hpdcache_if_adapter
               wdata: amo_data,
               op: amo_op,
               be: amo_data_be,
-              size: cva6_amo_req_i.size,
+              size: amo_req_size,
               sid: hpdcache_req_sid_i,
               tid: '1,
               need_rsp: 1'b1,

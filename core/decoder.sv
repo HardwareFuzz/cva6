@@ -1861,14 +1861,20 @@ module decoder
         if (!CVA6Cfg.CvxifEn) instruction_o.ex.valid = 1'b1;
         // we decoded an illegal exception here
         instruction_o.ex.cause = riscv::ILLEGAL_INSTR;
+        instruction_o.fu       = NONE;
+        instruction_o.op       = ariane_pkg::ADD;
       end else if (CVA6Cfg.RVH && virtual_illegal_instr) begin
         instruction_o.ex.valid = 1'b1;
         // we decoded an virtual illegal exception here
         instruction_o.ex.cause = riscv::VIRTUAL_INSTRUCTION;
+        instruction_o.fu       = NONE;
+        instruction_o.op       = ariane_pkg::ADD;
         // we got an ecall, set the correct cause depending on the current privilege level
       end else if (ecall) begin
         // this exception is valid
         instruction_o.ex.valid = 1'b1;
+        instruction_o.fu       = NONE;
+        instruction_o.op       = ariane_pkg::ADD;
         // depending on the privilege mode, set the appropriate cause
         if (priv_lvl_i == riscv::PRIV_LVL_S && CVA6Cfg.RVS) begin
           instruction_o.ex.cause = (CVA6Cfg.RVH && v_i) ? riscv::ENV_CALL_VSMODE : riscv::ENV_CALL_SMODE;
@@ -1882,6 +1888,8 @@ module decoder
         instruction_o.ex.valid = 1'b1;
         // set breakpoint cause
         instruction_o.ex.cause = riscv::BREAKPOINT;
+        instruction_o.fu       = NONE;
+        instruction_o.op       = ariane_pkg::ADD;
         // set gva bit
         if (CVA6Cfg.RVH) instruction_o.ex.gva = v_i;
         else instruction_o.ex.gva = 1'b0;

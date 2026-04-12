@@ -444,6 +444,24 @@ module load_unit
     end
   end
 
+`ifndef SYNTHESIS
+  always_ff @(posedge clk_i) begin : rv32_bad_load_size_diag
+    if (rst_ni && !CVA6Cfg.IS_XLEN64 && req_port_o.data_req && (req_port_o.data_size == 2'b11)) begin
+      $display(
+          "load_unit: unexpected RV32 load size=3 state=%0d op=%0d fu=%0d vaddr=0x%0h be=0x%0h valid=%0b dtlb_hit=%0b page_offset_match=%0b",
+          state_q,
+          lsu_ctrl_i.operation,
+          lsu_ctrl_i.fu,
+          lsu_ctrl_i.vaddr,
+          lsu_ctrl_i.be,
+          valid_i,
+          dtlb_hit_i,
+          page_offset_matches_i
+      );
+    end
+  end
+`endif
+
   // track the load data for later usage
   assign ldbuf_w = req_port_o.data_req & req_port_i.data_gnt;
 

@@ -889,4 +889,28 @@ module load_store_unit
 
   assign rvfi_lsu_ctrl_o = lsu_ctrl;
 
+`ifndef SYNTHESIS
+  always_ff @(posedge clk_i) begin : rv32_bad_lsu_req_diag
+    if (rst_ni && lsu_valid_i && !CVA6Cfg.IS_XLEN64 && (fu_data_i.fu == LOAD)
+        && (extract_transfer_size(fu_data_i.operation) == 2'b11)) begin
+      $error(
+          "load_store_unit: bad RV32 incoming load op=%0d imm=0x%0h operand_a=0x%0h trans_id=0x%0h",
+          fu_data_i.operation,
+          fu_data_i.imm,
+          fu_data_i.operand_a,
+          fu_data_i.trans_id
+      );
+    end
+    if (rst_ni && !CVA6Cfg.IS_XLEN64 && lsu_ctrl.valid && (lsu_ctrl.fu == LOAD) && (lsu_ctrl.be == '0)) begin
+      $error(
+          "load_store_unit: bad RV32 active load ctrl op=%0d vaddr=0x%0h be=0x%0h trans_id=0x%0h",
+          lsu_ctrl.operation,
+          lsu_ctrl.vaddr,
+          lsu_ctrl.be,
+          lsu_ctrl.trans_id
+      );
+    end
+  end
+`endif
+
 endmodule

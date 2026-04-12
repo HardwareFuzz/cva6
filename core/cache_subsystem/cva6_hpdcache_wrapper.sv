@@ -423,4 +423,21 @@ module cva6_hpdcache_wrapper
   assign dcache_miss_o = dcache_read_miss, wbuffer_not_ni_o = wbuffer_empty_o;
   //  }}}
 
+`ifndef SYNTHESIS
+  always_ff @(posedge clk_i) begin : rv32_bad_hpdcache_load_diag
+    if (rst_ni && (HPDcacheCfg.u.wordWidth == 32) && dcache_req_valid[1]
+        && (dcache_req[1].size == 2'b11)) begin
+      $error(
+          "cva6_hpdcache_wrapper: bad requester sid=%0d op=0x%0h size=%0b addr_offset=0x%0h be=0x%0h tid=0x%0h",
+          dcache_req[1].sid,
+          dcache_req[1].op,
+          dcache_req[1].size,
+          dcache_req[1].addr_offset,
+          dcache_req[1].be,
+          dcache_req[1].tid
+      );
+    end
+  end
+`endif
+
 endmodule : cva6_hpdcache_wrapper

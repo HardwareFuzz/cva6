@@ -10,8 +10,8 @@ Build the Verilator CVA6 testharness binaries.
 --isa can be specified multiple times. Defaults to building both rv64 and rv32.
 
 Supported ISA values:
-  rv32     (maps to cv32a6_imac_sv32)
-  rv32f    (maps to cv32a6_full_sv32)
+  rv32     (maps to cv32a6_full_sv32; includes F, B, Zcb, Zcmp)
+  rv32f    (alias of rv32; same cv32a6_full_sv32 config)
   rv64     (maps to cv64a6_full_sv39; includes F/D in this repo)
   rv64fd   (alias of rv64)
 
@@ -90,8 +90,7 @@ build_target() {
     esac
 
     case "$isa" in
-        rv32) target="cv32a6_imac_sv32" ;;
-        rv32f) target="cv32a6_full_sv32" ;;
+        rv32|rv32f) isa="rv32"; target="cv32a6_full_sv32" ;;
         rv64|rv64fd) isa="rv64"; target="cv64a6_full_sv39" ;;
         rv32fd) echo "Unsupported ISA: rv32fd"; exit 2 ;;
         rv64f) echo "Unsupported ISA: rv64f"; exit 2 ;;

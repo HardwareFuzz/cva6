@@ -736,8 +736,6 @@ module ariane_testharness #(
 
   `AXI_ASSIGN_FROM_REQ(core_bus[0], axi_ariane_req[0])
   `AXI_ASSIGN_TO_RESP(axi_ariane_resp[0], core_bus[0])
-  `AXI_ASSIGN_FROM_REQ(core_bus[1], axi_ariane_req[1])
-  `AXI_ASSIGN_TO_RESP(axi_ariane_resp[1], core_bus[1])
 
   ariane #(
     .CVA6Cfg              ( CVA6Cfg             ),
@@ -765,26 +763,31 @@ module ariane_testharness #(
     .noc_resp_i           ( axi_ariane_resp[0]  )
   );
 
-  ariane #(
-    .CVA6Cfg              ( CVA6Cfg             ),
-    .rvfi_probes_instr_t  ( rvfi_probes_instr_t ),
-    .rvfi_probes_csr_t    ( rvfi_probes_csr_t   ),
-    .rvfi_probes_t        ( rvfi_probes_t       ),
-    .noc_req_t            ( ariane_axi::req_t   ),
-    .noc_resp_t           ( ariane_axi::resp_t  )
-  ) i_ariane_1 (
-    .clk_i                ( clk_i               ),
-    .rst_ni               ( ndmreset_n          ),
-    .boot_addr_i          ( boot_addr_1         ),
-    .hart_id_i            ( {{(CVA6Cfg.XLEN-1){1'b0}}, 1'b1} ),
-    .irq_i                ( irqs                ),
-    .ipi_i                ( ipi[1]              ),
-    .time_irq_i           ( timer_irq[1]        ),
-    .rvfi_probes_o        ( rvfi_probes_1       ),
-    .debug_req_i          ( 1'b0                ),
-    .noc_req_o            ( axi_ariane_req[1]   ),
-    .noc_resp_i           ( axi_ariane_resp[1]  )
-  );
+  if (NUM_CORES_E > 1) begin : gen_second_hart
+    `AXI_ASSIGN_FROM_REQ(core_bus[1], axi_ariane_req[1])
+    `AXI_ASSIGN_TO_RESP(axi_ariane_resp[1], core_bus[1])
+
+    ariane #(
+      .CVA6Cfg              ( CVA6Cfg             ),
+      .rvfi_probes_instr_t  ( rvfi_probes_instr_t ),
+      .rvfi_probes_csr_t    ( rvfi_probes_csr_t   ),
+      .rvfi_probes_t        ( rvfi_probes_t       ),
+      .noc_req_t            ( ariane_axi::req_t   ),
+      .noc_resp_t           ( ariane_axi::resp_t  )
+    ) i_ariane_1 (
+      .clk_i                ( clk_i               ),
+      .rst_ni               ( ndmreset_n          ),
+      .boot_addr_i          ( boot_addr_1         ),
+      .hart_id_i            ( {{(CVA6Cfg.XLEN-1){1'b0}}, 1'b1} ),
+      .irq_i                ( irqs                ),
+      .ipi_i                ( ipi[1]              ),
+      .time_irq_i           ( timer_irq[1]        ),
+      .rvfi_probes_o        ( rvfi_probes_1       ),
+      .debug_req_i          ( 1'b0                ),
+      .noc_req_o            ( axi_ariane_req[1]   ),
+      .noc_resp_i           ( axi_ariane_resp[1]  )
+    );
+  end
 
   // -------------
   // Simulation Helper Functions
@@ -932,23 +935,6 @@ module ariane_testharness #(
       .rvfi_csr_o   (rvfi_csr)
   );
 
-  cva6_rvfi #(
-      .CVA6Cfg   (CVA6Cfg),
-      .rvfi_instr_t(rvfi_instr_t),
-      .rvfi_csr_t(rvfi_csr_t),
-      .rvfi_probes_instr_t(rvfi_probes_instr_t),
-      .rvfi_probes_csr_t(rvfi_probes_csr_t),
-      .rvfi_probes_t(rvfi_probes_t),
-      .rvfi_to_iti_t(rvfi_to_iti_t)
-  ) i_cva6_rvfi_1 (
-      .clk_i        (clk_i),
-      .rst_ni       (rst_ni),
-      .rvfi_probes_i(rvfi_probes_1),
-      .rvfi_instr_o (rvfi_instr_1),
-      .rvfi_to_iti_o   (rvfi_to_iti_1),
-      .rvfi_csr_o   (rvfi_csr_1)
-  );
-
   rvfi_tracer  #(
     .CVA6Cfg(CVA6Cfg),
     .rvfi_instr_t(rvfi_instr_t),
@@ -968,23 +954,42 @@ module ariane_testharness #(
     .end_of_test_o(tracer_exit)
   );
 
-  rvfi_tracer  #(
-    .CVA6Cfg(CVA6Cfg),
-    .rvfi_instr_t(rvfi_instr_t),
-    .rvfi_csr_t(rvfi_csr_t),
-    .rvfi_probes_instr_t(rvfi_probes_instr_t),
-    .rvfi_probes_t(rvfi_probes_t),
-    .HART_ID(1),
-    .DEBUG_START(0),
-    .DEBUG_STOP(0)
-  ) i_rvfi_tracer_1 (
-    .clk_i(clk_i),
-    .rst_ni(rst_ni),
-    .rvfi_i(rvfi_instr_1),
-    .rvfi_csr_i(rvfi_csr_1),
-    .rvfi_probes_i(rvfi_probes_1),
-    .end_of_test_o(tracer_exit_1)
-  );
+  if (NUM_CORES_E > 1) begin : gen_second_hart_rvfi
+    cva6_rvfi #(
+        .CVA6Cfg   (CVA6Cfg),
+        .rvfi_instr_t(rvfi_instr_t),
+        .rvfi_csr_t(rvfi_csr_t),
+        .rvfi_probes_instr_t(rvfi_probes_instr_t),
+        .rvfi_probes_csr_t(rvfi_probes_csr_t),
+        .rvfi_probes_t(rvfi_probes_t),
+        .rvfi_to_iti_t(rvfi_to_iti_t)
+    ) i_cva6_rvfi_1 (
+        .clk_i        (clk_i),
+        .rst_ni       (rst_ni),
+        .rvfi_probes_i(rvfi_probes_1),
+        .rvfi_instr_o (rvfi_instr_1),
+        .rvfi_to_iti_o   (rvfi_to_iti_1),
+        .rvfi_csr_o   (rvfi_csr_1)
+    );
+
+    rvfi_tracer  #(
+      .CVA6Cfg(CVA6Cfg),
+      .rvfi_instr_t(rvfi_instr_t),
+      .rvfi_csr_t(rvfi_csr_t),
+      .rvfi_probes_instr_t(rvfi_probes_instr_t),
+      .rvfi_probes_t(rvfi_probes_t),
+      .HART_ID(1),
+      .DEBUG_START(0),
+      .DEBUG_STOP(0)
+    ) i_rvfi_tracer_1 (
+      .clk_i(clk_i),
+      .rst_ni(rst_ni),
+      .rvfi_i(rvfi_instr_1),
+      .rvfi_csr_i(rvfi_csr_1),
+      .rvfi_probes_i(rvfi_probes_1),
+      .end_of_test_o(tracer_exit_1)
+    );
+  end
 
 `ifdef SPIKE_TANDEM
     spike #(

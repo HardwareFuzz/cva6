@@ -158,6 +158,42 @@ module cva6_rvfi
     end
   endfunction
 
+  function automatic logic is_amo_lr_op(input fu_op amo_op);
+    return (amo_op == AMO_LRW) || (amo_op == AMO_LRD);
+  endfunction
+
+  function automatic logic is_amo_sc_op(input fu_op amo_op);
+    return (amo_op == AMO_SCW) || (amo_op == AMO_SCD);
+  endfunction
+
+  function automatic logic [(CVA6Cfg.XLEN/8)-1:0] rvfi_mem_rmask_for_op(
+      input fu_op amo_op,
+      input logic [(CVA6Cfg.XLEN/8)-1:0] lsu_rmask_in,
+      input logic [(CVA6Cfg.XLEN/8)-1:0] lsu_wmask_in
+  );
+    if (is_amo_lr_op(amo_op)) begin
+      return lsu_wmask_in;
+    end
+    if (is_amo_sc_op(amo_op)) begin
+      return '0;
+    end
+    return lsu_rmask_in;
+  endfunction
+
+  function automatic logic [(CVA6Cfg.XLEN/8)-1:0] rvfi_mem_wmask_for_op(
+      input fu_op amo_op,
+      input logic [(CVA6Cfg.XLEN/8)-1:0] lsu_wmask_in,
+      input logic [CVA6Cfg.XLEN-1:0] rd_wdata_in
+  );
+    if (is_amo_lr_op(amo_op)) begin
+      return '0;
+    end
+    if (is_amo_sc_op(amo_op)) begin
+      return (rd_wdata_in == '0) ? lsu_wmask_in : '0;
+    end
+    return lsu_wmask_in;
+  endfunction
+
   localparam logic [63:0] SMODE_STATUS_READ_MASK = ariane_pkg::smode_status_read_mask(CVA6Cfg);
 
   logic flush;
@@ -420,11 +456,13 @@ module cva6_rvfi
     for (int i = 0; i < CVA6Cfg.NrCommitPorts; i++) begin
       logic exception;
       logic valid;
+
       exception = (i == 0) && commit_instr_valid[i] && ex_commit_valid && !commit_drop[i];
       valid     = (commit_ack[i] && !ex_commit_valid && !commit_drop[i]) ||
         (exception && (ex_commit_cause == riscv::ENV_CALL_MMODE ||
                   ex_commit_cause == riscv::ENV_CALL_SMODE ||
                   ex_commit_cause == riscv::ENV_CALL_UMODE));
+
       rvfi_instr_o[i].valid <= valid;
       rvfi_instr_o[i].insn  <= mem_q[commit_pointer[i]].instr;
       // when synchronous trap, the instruction is not executed
@@ -454,7 +492,9 @@ module cva6_rvfi
       rvfi_instr_o[i].mem_addr <= mem_q[commit_pointer[i]].lsu_addr;
       // So far, only write paddr is reported. TODO: read paddr
       rvfi_instr_o[i].mem_paddr <= mem_paddr;
-      rvfi_instr_o[i].mem_wmask <= mem_q[commit_pointer[i]].lsu_wmask;
+      rvfi_instr_o[i].mem_wmask <= rvfi_mem_wmask_for_op(
+          commit_instr_op[i], mem_q[commit_pointer[i]].lsu_wmask, wdata[i]
+      );
       // For AMO operations, compute the actual write value
       // Note: AMO operations write a computed value to memory, not the original register value
       if (is_amo(commit_instr_op[i])) begin
@@ -466,7 +506,9 @@ module cva6_rvfi
       end else begin
         rvfi_instr_o[i].mem_wdata <= mem_q[commit_pointer[i]].lsu_wdata;
       end
-      rvfi_instr_o[i].mem_rmask <= mem_q[commit_pointer[i]].lsu_rmask;
+      rvfi_instr_o[i].mem_rmask <= rvfi_mem_rmask_for_op(
+          commit_instr_op[i], mem_q[commit_pointer[i]].lsu_rmask, mem_q[commit_pointer[i]].lsu_wmask
+      );
       rvfi_instr_o[i].mem_rdata <= commit_instr_result[i];
       rvfi_instr_o[i].rs1_rdata <= mem_q[commit_pointer[i]].rs1_rdata;
       rvfi_instr_o[i].rs2_rdata <= mem_q[commit_pointer[i]].rs2_rdata;

@@ -7,16 +7,16 @@ Usage: ./build.sh [--isa <isa>] [--cores N] [--out-dir DIR] [--coverage|--covera
 
 Build the Verilator CVA6 testharness binaries.
 
---isa can be specified multiple times. Defaults to building both rv64 and rv32.
+--isa can be specified multiple times. Defaults to building both rv64fd and rv32f.
 
 Supported ISA values:
-  rv32     (maps to cv32a6_imac_sv32)
   rv32f    (maps to cv32a6_full_sv32)
-  rv64     (maps to cv64a6_full_sv39; includes F/D in this repo)
-  rv64fd   (alias of rv64)
+  rv64fd   (maps to cv64a6_full_sv39)
 
 Unsupported in this repo:
+  rv32     (no longer published once rv32f is available)
   rv32fd   (rv32 full config has RVD=0)
+  rv64     (no longer published once rv64fd is available)
   rv64f    (no rv64 config with RVD=0)
 
 Notes:
@@ -55,7 +55,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ ${#ISAS[@]} -eq 0 ]]; then
-    ISAS=("rv64" "rv32")
+    ISAS=("rv64fd" "rv32f")
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -74,6 +74,17 @@ if [[ ! "$CORES" =~ ^[0-9]+$ ]] || (( CORES < 1 )); then
     exit 2
 fi
 
+validate_isa() {
+    case "$1" in
+        rv32f|rv64fd) ;;
+        rv32) echo "Unsupported ISA: rv32"; exit 2 ;;
+        rv32fd) echo "Unsupported ISA: rv32fd"; exit 2 ;;
+        rv64) echo "Unsupported ISA: rv64"; exit 2 ;;
+        rv64f) echo "Unsupported ISA: rv64f"; exit 2 ;;
+        *) echo "Unknown ISA: ${1}"; exit 2 ;;
+    esac
+}
+
 build_target() {
     local isa="$1"
     local target=""
@@ -84,13 +95,10 @@ build_target() {
         none) cov_suffix="" ;;
     esac
 
+    validate_isa "${isa}"
     case "$isa" in
-        rv32) target="cv32a6_imac_sv32" ;;
         rv32f) target="cv32a6_full_sv32" ;;
-        rv64|rv64fd) isa="rv64"; target="cv64a6_full_sv39" ;;
-        rv32fd) echo "Unsupported ISA: rv32fd"; exit 2 ;;
-        rv64f) echo "Unsupported ISA: rv64f"; exit 2 ;;
-        *) echo "Unknown ISA: ${isa}"; exit 2 ;;
+        rv64fd) target="cv64a6_full_sv39" ;;
     esac
 
     local ver_dir="${BUILD_ROOT}/work-ver-${isa}_${CORES}c${cov_suffix}"
@@ -128,6 +136,10 @@ build_target() {
     chmod +x "${out_bin}"
     echo "  -> ${out_bin} (work dir: ${ver_dir})"
 }
+
+for isa in "${ISAS[@]}"; do
+    validate_isa "$isa"
+done
 
 for isa in "${ISAS[@]}"; do
     build_target "$isa"

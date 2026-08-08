@@ -1941,6 +1941,7 @@ module cva6
       .flush_unissued_instr_i(flush_unissued_instr_ctrl_id),
       .decoded_instr_valid_i (issue_entry_valid_id_issue),
       .decoded_instr_ack_i   (issue_instr_issue_id),
+      .decoded_instr_i       (issue_entry_id_issue),
 
       .rs1_i(rvfi_rs1),
       .rs2_i(rvfi_rs2),

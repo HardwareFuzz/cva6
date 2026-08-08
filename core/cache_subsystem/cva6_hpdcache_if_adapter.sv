@@ -238,7 +238,7 @@ module cva6_hpdcache_if_adapter
           }
       );
 
-      if (CVA6Cfg.XLEN == 64) begin : amo_data_64_gen
+      if (CVA6Cfg.IS_XLEN64) begin : amo_data_64_gen
         assign amo_req_size = cva6_amo_req_i.size;
         assign amo_is_word = (amo_req_size == 2'b10);
         assign amo_is_word_hi = cva6_amo_req_i.operand_a[2];

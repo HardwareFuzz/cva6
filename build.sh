@@ -85,6 +85,17 @@ validate_isa() {
     esac
 }
 
+validate_isa() {
+    case "$1" in
+        rv32f|rv64fd) ;;
+        rv32) echo "Unsupported ISA: rv32"; exit 2 ;;
+        rv32fd) echo "Unsupported ISA: rv32fd"; exit 2 ;;
+        rv64) echo "Unsupported ISA: rv64"; exit 2 ;;
+        rv64f) echo "Unsupported ISA: rv64f"; exit 2 ;;
+        *) echo "Unknown ISA: ${1}"; exit 2 ;;
+    esac
+}
+
 build_target() {
     local isa="$1"
     local target=""

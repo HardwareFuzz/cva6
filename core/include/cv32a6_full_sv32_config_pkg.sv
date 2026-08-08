@@ -209,11 +209,21 @@ package cva6_config_pkg;
       DebugEn: bit'(1),
 
       // Trigger modules (disabled by default)
-      SDTRIG: bit'(0),
-      Mcontrol6: bit'(0),
-      Icount: bit'(0),
-      Etrigger: bit'(0),
-      Itrigger: bit'(0),
+      Sdtrig: bit'(0),
+      SdtrigMcontrol6: bit'(0),
+      SdtrigMcontrol6ExecAddr: bit'(0),
+      SdtrigMcontrol6ExecData: bit'(0),
+      SdtrigMcontrol6Store: bit'(0),
+      SdtrigMcontrol6LoadAddr: bit'(0),
+      SdtrigMcontrol6LoadData: bit'(0),
+      SdtrigIcount: bit'(0),
+      SdtrigEtrigger: bit'(0),
+      SdtrigItrigger: bit'(0),
+      SdtrigNrTriggers: int'(0),
+      SdtrigTriggerChaining: bit'(0),
+      SdtrigSupportedActions: 2'b00,
+      SdtrigSupportedMatch: 10'b0,
+      SdtrigSupportTextra: bit'(0),
       
       // AXI Burst Write
       AxiBurstWriteEn: bit'(0),

@@ -1,0 +1,120 @@
+[
+  {
+    "id": 31247348947,
+    "source": "github-actions",
+    "simulator": "verilator",
+    "run_number": 1,
+    "status": "completed",
+    "conclusion": "failure",
+    "html_url": "https://github.com/HardwareFuzz/cva6/actions/runs/31247348947",
+    "head_branch": "cx-2hart-build",
+    "head_sha": "ebd5ef20",
+    "event": "push",
+    "created_at": "2026-08-08T07:58:04Z",
+    "updated_at": "2026-08-08T08:29:55Z",
+    "run_started_at": "2026-08-08T07:58:04Z",
+    "duration_seconds": 1911,
+    "total_jobs": 8,
+    "passed_jobs": 0,
+    "failed_jobs": 2,
+    "skipped_jobs": 6,
+    "jobs": [
+      {
+        "name": "execute-riscv32-tests (dv-riscv-arch-test, cv32a65x, veri-testharness)",
+        "conclusion": "cancelled",
+        "started_at": "2026-08-08T08:27:39Z",
+        "completed_at": "2026-08-08T08:29:54Z",
+        "duration_seconds": 135,
+        "html_url": "https://github.com/HardwareFuzz/cva6/actions/runs/31247348947/job/93080811796",
+        "arch": "rv32",
+        "config": "cv32a65x",
+        "testcase": "dv-riscv-arch-test",
+        "simulator": "veri-testharness"
+      },
+      {
+        "name": "execute-riscv32-tests (cv32a6_tests, cv32a65x, veri-testharness)",
+        "conclusion": "failure",
+        "started_at": "2026-08-08T08:27:40Z",
+        "completed_at": "2026-08-08T08:29:38Z",
+        "duration_seconds": 118,
+        "html_url": "https://github.com/HardwareFuzz/cva6/actions/runs/31247348947/job/93080811797",
+        "arch": "rv32",
+        "config": "cv32a65x",
+        "testcase": "cv32a6_tests",
+        "simulator": "veri-testharness"
+      },
+      {
+        "name": "execute-riscv64-tests (cv64a6_imafdc_tests, cv64a6_imafdc_sv39_hpdcache, veri-testharness)",
+        "conclusion": "failure",
+        "started_at": "2026-08-08T08:27:39Z",
+        "completed_at": "2026-08-08T08:29:16Z",
+        "duration_seconds": 97,
+        "html_url": "https://github.com/HardwareFuzz/cva6/actions/runs/31247348947/job/93080811825",
+        "arch": "rv64",
+        "config": "cv64a6_imafdc_sv39_hpdcache",
+        "testcase": "cv64a6_imafdc_tests",
+        "simulator": "veri-testharness"
+      },
+      {
+        "name": "execute-riscv64-tests (cv64a6_imafdc_tests, cv64a6_imafdc_sv39_hpdcache_wb, veri-testharness)",
+        "conclusion": "cancelled",
+        "started_at": "2026-08-08T08:27:39Z",
+        "completed_at": "2026-08-08T08:29:32Z",
+        "duration_seconds": 113,
+        "html_url": "https://github.com/HardwareFuzz/cva6/actions/runs/31247348947/job/93080811829",
+        "arch": "rv64",
+        "config": "cv64a6_imafdc_sv39_hpdcache_wb",
+        "testcase": "cv64a6_imafdc_tests",
+        "simulator": "veri-testharness"
+      },
+      {
+        "name": "execute-riscv64-tests (cv64a6_imafdc_tests, cv64a6_imafdc_sv39_wb, veri-testharness)",
+        "conclusion": "cancelled",
+        "started_at": "2026-08-08T08:27:40Z",
+        "completed_at": "2026-08-08T08:29:32Z",
+        "duration_seconds": 112,
+        "html_url": "https://github.com/HardwareFuzz/cva6/actions/runs/31247348947/job/93080811832",
+        "arch": "rv64",
+        "config": "cv64a6_imafdc_sv39_wb",
+        "testcase": "cv64a6_imafdc_tests",
+        "simulator": "veri-testharness"
+      },
+      {
+        "name": "execute-riscv64-tests (cv64a6_imafdc_tests, cv64a6_imafdc_sv39, veri-testharness)",
+        "conclusion": "cancelled",
+        "started_at": "2026-08-08T08:27:46Z",
+        "completed_at": "2026-08-08T08:29:29Z",
+        "duration_seconds": 103,
+        "html_url": "https://github.com/HardwareFuzz/cva6/actions/runs/31247348947/job/93080811838",
+        "arch": "rv64",
+        "config": "cv64a6_imafdc_sv39",
+        "testcase": "cv64a6_imafdc_tests",
+        "simulator": "veri-testharness"
+      },
+      {
+        "name": "execute-riscv64-tests (dv-riscv-arch-test, cv64a6_imafdc_sv39_hpdcache, veri-testharness)",
+        "conclusion": "cancelled",
+        "started_at": "2026-08-08T08:27:39Z",
+        "completed_at": "2026-08-08T08:29:31Z",
+        "duration_seconds": 112,
+        "html_url": "https://github.com/HardwareFuzz/cva6/actions/runs/31247348947/job/93080811839",
+        "arch": "rv64",
+        "config": "cv64a6_imafdc_sv39_hpdcache",
+        "testcase": "dv-riscv-arch-test",
+        "simulator": "veri-testharness"
+      },
+      {
+        "name": "execute-riscv64-tests (dv-riscv-arch-test, cv64a6_imafdc_sv39_hpdcache_wb, veri-testharness)",
+        "conclusion": "cancelled",
+        "started_at": "2026-08-08T08:27:39Z",
+        "completed_at": "2026-08-08T08:29:34Z",
+        "duration_seconds": 115,
+        "html_url": "https://github.com/HardwareFuzz/cva6/actions/runs/31247348947/job/93080811856",
+        "arch": "rv64",
+        "config": "cv64a6_imafdc_sv39_hpdcache_wb",
+        "testcase": "dv-riscv-arch-test",
+        "simulator": "veri-testharness"
+      }
+    ]
+  }
+]

@@ -208,6 +208,10 @@ module cva6_rvfi
 
   logic [((CVA6Cfg.CvxifEn || CVA6Cfg.RVV) ? 5 : 4)-1:0][CVA6Cfg.XLEN-1:0] wbdata;
   logic [CVA6Cfg.NrCommitPorts-1:0] commit_ack;
+  logic [CVA6Cfg.NrCommitPorts-1:0][63:0] commit_start_cycle;
+  logic [CVA6Cfg.NrCommitPorts-1:0][63:0] commit_end_cycle;
+  logic [CVA6Cfg.NrCommitPorts-1:0][63:0] commit_trace_token;
+  logic [CVA6Cfg.NrCommitPorts-1:0] commit_start_valid;
   logic [CVA6Cfg.PLEN-1:0] mem_paddr;
   logic debug_mode;
   logic [CVA6Cfg.NrCommitPorts-1:0][CVA6Cfg.XLEN-1:0] wdata;
@@ -279,6 +283,10 @@ module cva6_rvfi
 
   assign wbdata = instr.wbdata;
   assign commit_ack = instr.commit_ack;
+  assign commit_start_cycle = instr.commit_start_cycle;
+  assign commit_end_cycle = instr.commit_end_cycle;
+  assign commit_trace_token = instr.commit_trace_token;
+  assign commit_start_valid = instr.commit_start_valid;
   assign mem_paddr = instr.mem_paddr;
   assign debug_mode = instr.debug_mode;
   assign wdata = instr.wdata;
@@ -470,6 +478,13 @@ module cva6_rvfi
       rvfi_instr_o[i].mem_rdata <= commit_instr_result[i];
       rvfi_instr_o[i].rs1_rdata <= mem_q[commit_pointer[i]].rs1_rdata;
       rvfi_instr_o[i].rs2_rdata <= mem_q[commit_pointer[i]].rs2_rdata;
+      // Keep the trace-only allocation metadata in the same register stage as
+      // the RVFI terminal event.  Reading the live scoreboard sidecar directly
+      // in the tracer would be one cycle out of phase with rvfi_instr_o.
+      rvfi_instr_o[i].cx_trace_start_valid <= commit_start_valid[i];
+      rvfi_instr_o[i].cx_trace_token <= commit_trace_token[i];
+      rvfi_instr_o[i].cx_trace_start_cycle <= commit_start_cycle[i];
+      rvfi_instr_o[i].cx_trace_end_cycle <= commit_end_cycle[i];
       rvfi_to_iti_o.branch_valid[i] <= mem_q[commit_pointer[i]].branch_valid;
       rvfi_to_iti_o.is_taken[i] <= mem_q[commit_pointer[i]].is_taken;
       rvfi_to_iti_o.is_compressed[i] <= mem_q[commit_pointer[i]].is_compressed;

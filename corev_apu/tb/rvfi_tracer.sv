@@ -43,10 +43,12 @@ module rvfi_tracer #(
   string binary;
   int f;
   int unsigned SIM_FINISH;
+  int unsigned TRACE_HARTS;
   string trace_dir;
   string trace_override;
   string trace_fname;
   string hart_suffix;
+  string isa_name;
   initial begin
     TOHOST_ADDR = '0;
     if ($value$plusargs("trace_rvfi_file=%s", trace_override)) begin
@@ -74,6 +76,15 @@ module rvfi_tracer #(
     if (f == 0) begin
       $fatal(1, "*** [rvfi_tracer] ERROR: Unable to open RVFI trace file '%s'", trace_fname);
     end
+    if (CVA6Cfg.IS_XLEN64) begin
+      isa_name = (CVA6Cfg.FLen >= 64) ? "rv64fd" : ((CVA6Cfg.FLen >= 32) ? "rv64f" : "rv64i");
+    end else begin
+      isa_name = (CVA6Cfg.FLen >= 64) ? "rv32fd" : ((CVA6Cfg.FLen >= 32) ? "rv32f" : "rv32i");
+    end
+    if (!$value$plusargs("num_harts=%d", TRACE_HARTS)) TRACE_HARTS = 1;
+    $fwrite(f,
+      "CXTRACE_HEADER v=2 trace_version=2 core=cva6 hart=%0d harts=%0d cycle_domain=core_ref_clk cycle_base=first_post_reset_posedge_is_1 interval=inclusive start_kind=backend_alloc end_kind=arch_commit_or_precise_trap isa=%s build_config=cva6_rvfi\n",
+      HART_ID, TRACE_HARTS, isa_name);
     if (!$value$plusargs("time_out=%d", SIM_FINISH)) SIM_FINISH = 2000000;
     if (!$value$plusargs("tohost_addr=%h", TOHOST_ADDR)) TOHOST_ADDR = '0;
     if (TOHOST_ADDR == '0) begin
@@ -94,8 +105,11 @@ module rvfi_tracer #(
   final $fclose(f);
 
   logic [63:0] cycles;
+  logic [63:0] term_seq_q;
+  logic [63:0] instret_seq_q;
+  logic [63:0] last_terminal_token_q;
+  logic last_terminal_token_valid_q;
   rvfi_probes_instr_t instr;
-  logic [CVA6Cfg.NrCommitPorts-1:0][63:0] commit_start_cycle;
   // Generate the trace based on RVFI
   logic [63:0] pc64;
   string cause;
@@ -111,8 +125,6 @@ module rvfi_tracer #(
       instr = rvfi_probes_i.instr;
     end
   end
-
-  assign commit_start_cycle = instr.commit_start_cycle;
 
   function automatic logic [CVA6Cfg.XLEN-1:0] align_mem_wdata(
     input logic [CVA6Cfg.XLEN-1:0] raw_wdata,
@@ -170,17 +182,98 @@ module rvfi_tracer #(
 
   always_ff @(posedge clk_i) begin
     logic [63:0] clk_end;
-    clk_end = cycles + 64'd1;
+    logic [63:0] term_offset;
+    logic [63:0] instret_offset;
+    logic [63:0] last_terminal_token;
+    logic last_terminal_token_valid;
+    clk_end = 64'd0;
+    term_offset = 64'd0;
+    instret_offset = 64'd0;
+    last_terminal_token = last_terminal_token_q;
+    last_terminal_token_valid = last_terminal_token_valid_q;
     end_of_test_q <= (rst_ni && (end_of_test_d[0] == 1'b1)) ? end_of_test_d : 0;
 
     if (rst_ni) begin
       for (int i = 0; i < CVA6Cfg.NrCommitPorts; i++) begin
         logic [63:0] clk_start;
+        logic [63:0] clk_span;
+        logic [63:0] token;
+        logic [63:0] term_seq;
+        logic [63:0] instret_seq;
+        logic start_valid;
         pc64 = {{CVA6Cfg.XLEN-CVA6Cfg.VLEN{rvfi_i[i].pc_rdata[CVA6Cfg.VLEN-1]}}, rvfi_i[i].pc_rdata};
-        clk_start = (commit_start_cycle[i] != 64'd0) ? commit_start_cycle[i] : clk_end;
+        clk_end = rvfi_i[i].cx_trace_end_cycle;
+        clk_start = rvfi_i[i].cx_trace_start_cycle;
+        token = rvfi_i[i].cx_trace_token;
+        start_valid = rvfi_i[i].cx_trace_start_valid;
+        term_seq = term_seq_q + term_offset;
+        instret_seq = instret_seq_q + instret_offset;
+        clk_span = (start_valid && clk_end >= clk_start) ? clk_end - clk_start + 64'd1 : 64'd0;
+
+        if ((rvfi_i[i].valid || rvfi_i[i].trap) && !rvfi_i[i].intr[2]) begin
+          assert (start_valid)
+          else $error("[rvfi_tracer] terminal event without backend-allocation metadata: hart=%0d slot=%0d pc=0x%h",
+                      HART_ID, i, pc64);
+          assert (!start_valid || (clk_start >= 64'd1 && clk_end >= clk_start))
+          else $error("[rvfi_tracer] terminal cycle precedes allocation: hart=%0d slot=%0d start=%0d end=%0d",
+                      HART_ID, i, clk_start, clk_end);
+        end
         // print the instruction information if the instruction is valid or a trap is taken
-        if (rvfi_i[i].valid) begin
+        if (rvfi_i[i].intr[2]) begin
+          $fwrite(f,
+            "CXTRACE v=2 event=interrupt core=cva6 hart=%0d cycle=%0d pc=0x%h cause=0x%h priv=%0d\n",
+            HART_ID, clk_end, pc64, rvfi_i[i].cause, rvfi_i[i].mode);
+        end else if (rvfi_i[i].trap) begin
+          logic [31:0] insn_for_trace;
+          logic [2:0] insn_len;
+          insn_for_trace = (rvfi_i[i].insn[1:0] != 2'b11) ? {16'd0, rvfi_i[i].insn[15:0]} : rvfi_i[i].insn;
+          insn_len = (rvfi_i[i].insn[1:0] != 2'b11) ? 3'd2 : 3'd4;
+          assert (!last_terminal_token_valid || token != last_terminal_token)
+          else $error("[rvfi_tracer] duplicate architectural terminal token: hart=%0d token=%0d", HART_ID, token);
+          last_terminal_token = token;
+          last_terminal_token_valid = 1'b1;
+          cause = "UNKNOWN";
+          case (rvfi_i[i].cause)
+            32'h0: cause = "INSTR_ADDR_MISALIGNED";
+            32'h1: cause = "INSTR_ACCESS_FAULT";
+            32'h2: cause = "ILLEGAL_INSTR";
+            32'h3: cause = "BREAKPOINT";
+            32'h4: cause = "LD_ADDR_MISALIGNED";
+            32'h5: cause = "LD_ACCESS_FAULT";
+            32'h6: cause = "ST_ADDR_MISALIGNED";
+            32'h7: cause = "ST_ACCESS_FAULT";
+            32'h8: cause = "ENV_CALL_UMODE";
+            32'h9: cause = "ENV_CALL_SMODE";
+            32'hb: cause = "ENV_CALL_MMODE";
+            32'hc: cause = "INSTR_PAGE_FAULT";
+            32'hd: cause = "LOAD_PAGE_FAULT";
+            32'hf: cause = "STORE_PAGE_FAULT";
+            default: cause = "UNKNOWN";
+          endcase
+          if (rvfi_i[i].insn[1:0] != 2'b11) begin
+            $fwrite(f, "%s exception @ 0x%h (0x%h) clk_start=%0d clk_end=%0d clk_span=%0d hart=%0d token=%0d term_seq=%0d commit_slot=%0d start_valid=%0d start_kind=backend_alloc end_kind=precise_trap retired=0\n",
+              cause, pc64, rvfi_i[i].insn[15:0], clk_start, clk_end, clk_span,
+              HART_ID, token, term_seq, term_offset, start_valid);
+          end else begin
+            $fwrite(f, "%s exception @ 0x%h (0x%h) clk_start=%0d clk_end=%0d clk_span=%0d hart=%0d token=%0d term_seq=%0d commit_slot=%0d start_valid=%0d start_kind=backend_alloc end_kind=precise_trap retired=0\n",
+              cause, pc64, rvfi_i[i].insn, clk_start, clk_end, clk_span,
+              HART_ID, token, term_seq, term_offset, start_valid);
+          end
+          $fwrite(f,
+            "CXTRACE v=2 event=inst_terminal core=cva6 hart=%0d token=%0d term_seq=%0d instret_seq=- commit_slot=%0d pc=0x%h insn=0x%h insn_len=%0d start_cycle=%0d end_cycle=%0d span=%0d start_valid=%0d start_kind=backend_alloc end_kind=precise_trap retired=0 trap=1 cause=0x%h priv=%0d\n",
+            HART_ID, token, term_seq, term_offset, pc64, insn_for_trace, insn_len,
+            clk_start, clk_end, clk_span, start_valid, rvfi_i[i].cause, rvfi_i[i].mode);
+          term_offset = term_offset + 64'd1;
+        end else if (rvfi_i[i].valid) begin
           logic dest_is_fp;
+          logic [31:0] insn_for_trace;
+          logic [2:0] insn_len;
+          insn_for_trace = (rvfi_i[i].insn[1:0] != 2'b11) ? {16'd0, rvfi_i[i].insn[15:0]} : rvfi_i[i].insn;
+          insn_len = (rvfi_i[i].insn[1:0] != 2'b11) ? 3'd2 : 3'd4;
+          assert (!last_terminal_token_valid || token != last_terminal_token)
+          else $error("[rvfi_tracer] duplicate architectural terminal token: hart=%0d token=%0d", HART_ID, token);
+          last_terminal_token = token;
+          last_terminal_token_valid = 1'b1;
           // Instruction information
           if (rvfi_i[i].intr[2]) begin
              $fwrite(f, "core   INTERRUPT 0: 0x%h (0x%h) DASM(%h)\n",
@@ -255,42 +348,30 @@ module rvfi_tracer #(
               $display("*** [rvfi_tracer] INFO: Simulation terminated after %d cycles!\n", cycles);
             end
           end
-          $fwrite(f, " clk_start=%0d clk_end=%0d clk_span=%0d\n",
-            clk_start, clk_end, clk_end - clk_start + 1);
-        end else begin
-          if (rvfi_i[i].trap) begin
-            case (rvfi_i[i].cause)
-              32'h0: cause = "INSTR_ADDR_MISALIGNED";
-              32'h1: cause = "INSTR_ACCESS_FAULT";
-              32'h2: cause = "ILLEGAL_INSTR";
-              32'h3: cause = "BREAKPOINT";
-              32'h4: cause = "LD_ADDR_MISALIGNED";
-              32'h5: cause = "LD_ACCESS_FAULT";
-              32'h6: cause = "ST_ADDR_MISALIGNED";
-              32'h7: cause = "ST_ACCESS_FAULT";
-              32'h8: cause = "ENV_CALL_UMODE";
-              32'h9: cause = "ENV_CALL_SMODE";
-              32'hb: cause = "ENV_CALL_MMODE";
-              32'hc: cause = "INSTR_PAGE_FAULT";
-              32'hd: cause = "LOAD_PAGE_FAULT";
-              32'hf: cause = "STORE_PAGE_FAULT";
-            endcase;
-            if (rvfi_i[i].insn[1:0] != 2'b11) begin
-              $fwrite(f, "%s exception @ 0x%h (0x%h) clk_start=%0d clk_end=%0d clk_span=%0d\n",
-                cause, pc64, rvfi_i[i].insn[15:0], clk_start, clk_end, clk_end - clk_start + 1);
-            end else begin
-              $fwrite(f, "%s exception @ 0x%h (0x%h) clk_start=%0d clk_end=%0d clk_span=%0d\n",
-                cause, pc64, rvfi_i[i].insn, clk_start, clk_end, clk_end - clk_start + 1);
-            end
-          end
+          $fwrite(f, " clk_start=%0d clk_end=%0d clk_span=%0d hart=%0d token=%0d term_seq=%0d instret_seq=%0d commit_slot=%0d start_valid=%0d start_kind=backend_alloc end_kind=arch_commit retired=1\n",
+            clk_start, clk_end, clk_span, HART_ID, token, term_seq, instret_seq, term_offset, start_valid);
+          $fwrite(f,
+            "CXTRACE v=2 event=inst_terminal core=cva6 hart=%0d token=%0d term_seq=%0d instret_seq=%0d commit_slot=%0d pc=0x%h insn=0x%h insn_len=%0d start_cycle=%0d end_cycle=%0d span=%0d start_valid=%0d start_kind=backend_alloc end_kind=arch_commit retired=1 trap=0 cause=none priv=%0d\n",
+            HART_ID, token, term_seq, instret_seq, term_offset, pc64, insn_for_trace, insn_len,
+            clk_start, clk_end, clk_span, start_valid, rvfi_i[i].mode);
+          term_offset = term_offset + 64'd1;
+          instret_offset = instret_offset + 64'd1;
         end
       end
     end
 
     if (~rst_ni) begin
       cycles <= 0;
+      term_seq_q <= 64'd0;
+      instret_seq_q <= 64'd0;
+      last_terminal_token_q <= 64'd0;
+      last_terminal_token_valid_q <= 1'b0;
     end else begin
       cycles <= cycles+1;
+      term_seq_q <= term_seq_q + term_offset;
+      instret_seq_q <= instret_seq_q + instret_offset;
+      last_terminal_token_q <= last_terminal_token;
+      last_terminal_token_valid_q <= last_terminal_token_valid;
     end
     if (cycles > SIM_FINISH)
       end_of_test_q <= 32'hffff_ffff;

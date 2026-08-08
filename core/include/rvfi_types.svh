@@ -26,6 +26,10 @@
   logic [config_pkg::NRET*(Cfg.XLEN/8)-1:0]  mem_wmask; \
   logic [config_pkg::NRET*Cfg.XLEN-1:0]      mem_rdata; \
   logic [config_pkg::NRET*Cfg.XLEN-1:0]      mem_wdata; \
+  logic                                      cx_trace_start_valid; \
+  logic [63:0]                               cx_trace_token; \
+  logic [63:0]                               cx_trace_start_cycle; \
+  logic [63:0]                               cx_trace_end_cycle; \
 }
 
 `define RVFI_CSR_ELMT_T(Cfg) struct packed { \
@@ -127,6 +131,9 @@
   logic debug_mode; \
   logic [Cfg.NrCommitPorts-1:0][Cfg.XLEN-1:0] wdata; \
   logic [Cfg.NrCommitPorts-1:0][63:0] commit_start_cycle; \
+  logic [Cfg.NrCommitPorts-1:0][63:0] commit_end_cycle; \
+  logic [Cfg.NrCommitPorts-1:0][63:0] commit_trace_token; \
+  logic [Cfg.NrCommitPorts-1:0] commit_start_valid; \
   logic branch_valid; \
   logic is_taken; \
   logic [Cfg.XLEN-1:0] tval; \

@@ -37,6 +37,7 @@ module cva6_rvfi_probes
     input logic flush_unissued_instr_i,
     input logic [CVA6Cfg.NrIssuePorts-1:0] decoded_instr_valid_i,
     input logic [CVA6Cfg.NrIssuePorts-1:0] decoded_instr_ack_i,
+    input scoreboard_entry_t [CVA6Cfg.NrIssuePorts-1:0] decoded_instr_i,
 
     input logic [CVA6Cfg.NrIssuePorts-1:0][CVA6Cfg.XLEN-1:0] rs1_i,
     input logic [CVA6Cfg.NrIssuePorts-1:0][CVA6Cfg.XLEN-1:0] rs2_i,
@@ -65,7 +66,13 @@ module cva6_rvfi_probes
   rvfi_probes_csr_t   csr;
   rvfi_probes_instr_t instr;
   logic [63:0] trace_cycle_q;
+  logic [63:0] next_trace_token_q;
   logic [63:0] issue_start_cycles_q [CVA6Cfg.NR_SB_ENTRIES];
+  logic [63:0] issue_trace_tokens_q [CVA6Cfg.NR_SB_ENTRIES];
+  logic issue_start_valid_q [CVA6Cfg.NR_SB_ENTRIES];
+  logic macro_trace_active_q;
+  logic [63:0] macro_trace_start_cycle_q;
+  logic [63:0] macro_trace_token_q;
 
   always_comb begin
     csr = '0;
@@ -127,6 +134,9 @@ module cva6_rvfi_probes
 
     for (int i = 0; i < CVA6Cfg.NrCommitPorts; i++) begin
       instr.commit_start_cycle[i] = issue_start_cycles_q[commit_pointer_i[i]];
+      instr.commit_end_cycle[i] = trace_cycle_q + 64'd1;
+      instr.commit_trace_token[i] = issue_trace_tokens_q[commit_pointer_i[i]];
+      instr.commit_start_valid[i] = issue_start_valid_q[commit_pointer_i[i]];
     end
 
     csr = csr_i;
@@ -137,21 +147,75 @@ module cva6_rvfi_probes
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       trace_cycle_q <= 64'd0;
+      next_trace_token_q <= 64'd0;
+      macro_trace_active_q <= 1'b0;
+      macro_trace_start_cycle_q <= 64'd0;
+      macro_trace_token_q <= 64'd0;
       for (int entry = 0; entry < CVA6Cfg.NR_SB_ENTRIES; entry++) begin
         issue_start_cycles_q[entry] <= 64'd0;
+        issue_trace_tokens_q[entry] <= 64'd0;
+        issue_start_valid_q[entry] <= 1'b0;
       end
     end else begin
       trace_cycle_q <= trace_cycle_q + 64'd1;
-      if (flush_i) begin
-        for (int entry = 0; entry < CVA6Cfg.NR_SB_ENTRIES; entry++) begin
-          issue_start_cycles_q[entry] <= 64'd0;
+      // Invalidate a sidecar exactly when its architectural macro commits.
+      // Allocation below has priority if an implementation ever reuses the
+      // same scoreboard slot on the same edge.
+      for (int commit = 0; commit < CVA6Cfg.NrCommitPorts; commit++) begin
+        if (commit_ack_i[commit]) begin
+          issue_start_valid_q[commit_pointer_i[commit]] <= 1'b0;
         end
+      end
+      if (flush_i) begin
+        // A frontend redirect only squashes younger entries; older scoreboard
+        // entries remain live and must keep their allocation metadata.  Stale
+        // slots are harmless because allocation overwrites the whole sidecar.
+        macro_trace_active_q <= 1'b0;
       end else begin
+        logic [63:0] next_trace_token;
+        logic macro_trace_active;
+        logic [63:0] macro_trace_start_cycle;
+        logic [63:0] macro_trace_token;
+
+        next_trace_token = next_trace_token_q;
+        macro_trace_active = macro_trace_active_q;
+        macro_trace_start_cycle = macro_trace_start_cycle_q;
+        macro_trace_token = macro_trace_token_q;
+
         for (int issue = 0; issue < CVA6Cfg.NrIssuePorts; issue++) begin
           if (decoded_instr_valid_i[issue] && decoded_instr_ack_i[issue] && !flush_unissued_instr_i) begin
-            issue_start_cycles_q[issue_pointer_i[issue]] <= trace_cycle_q + 64'd1;
+            logic [63:0] allocated_start_cycle;
+            logic [63:0] allocated_token;
+
+            if (CVA6Cfg.RVZCMP && decoded_instr_i[issue].is_macro_instr && macro_trace_active) begin
+              allocated_start_cycle = macro_trace_start_cycle;
+              allocated_token = macro_trace_token;
+            end else begin
+              allocated_start_cycle = trace_cycle_q + 64'd1;
+              allocated_token = next_trace_token;
+              next_trace_token = next_trace_token + 64'd1;
+              if (CVA6Cfg.RVZCMP && decoded_instr_i[issue].is_macro_instr) begin
+                macro_trace_start_cycle = allocated_start_cycle;
+                macro_trace_token = allocated_token;
+                macro_trace_active = 1'b1;
+              end
+            end
+
+            issue_start_cycles_q[issue_pointer_i[issue]] <= allocated_start_cycle;
+            issue_trace_tokens_q[issue_pointer_i[issue]] <= allocated_token;
+            issue_start_valid_q[issue_pointer_i[issue]] <= 1'b1;
+
+            if (CVA6Cfg.RVZCMP && decoded_instr_i[issue].is_macro_instr &&
+                decoded_instr_i[issue].is_last_macro_instr) begin
+              macro_trace_active = 1'b0;
+            end
           end
         end
+
+        next_trace_token_q <= next_trace_token;
+        macro_trace_active_q <= macro_trace_active;
+        macro_trace_start_cycle_q <= macro_trace_start_cycle;
+        macro_trace_token_q <= macro_trace_token;
       end
     end
   end
